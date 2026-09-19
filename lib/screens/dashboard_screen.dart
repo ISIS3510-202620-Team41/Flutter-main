@@ -25,7 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final screens = <Widget>[
       HomeScreen(onOpenFlow: () => Navigator.pushNamed(context, '/activity/create')),
       const FriendsScreen(),
-      // ActivitiesScreen(onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail')),
+      ActivitiesScreen(onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail')),
       const ProfilePlaceholderScreen(),
     ];
 
