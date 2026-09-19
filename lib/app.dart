@@ -5,12 +5,14 @@ import 'screens/activity_detail_screen.dart';
 import 'screens/activity_created_screen.dart';
 import 'screens/create_activity_placeholder_screen.dart';
 import 'theme/app_theme.dart';
+import 'screens/confirmation_step.dart';
 
 class AppRoutes {
   static const home = '/';
   static const createActivity = '/activity/create';
   static const activityDetail = '/activity-detail';
   static const activityCreated = '/activity-created'; //Confirmation screen
+  static const confirmation_step = '/confirmation-step';
 }
 
 class LlamallaApp extends StatelessWidget {
@@ -28,6 +30,7 @@ class LlamallaApp extends StatelessWidget {
         AppRoutes.createActivity: (_) => const CreateActivityPlaceholderScreen(),
         AppRoutes.activityCreated: (_) => const ActivityCreatedScreen(),
         AppRoutes.activityDetail: (_) => const ActivityDetailScreen(),
+        AppRoutes.confirmation_step: (_) => const ConfirmationStepView()
       },
     );
   }
