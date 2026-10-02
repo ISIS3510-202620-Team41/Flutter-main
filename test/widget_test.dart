@@ -1,9 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llamalla/app.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets('shows the Figma auth entry screen', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const LlamallaApp());
+    await tester.pumpAndSettle();
 
     expect(find.text('Actividad ya'), findsOneWidget);
     expect(find.text('Qué bueno verte de\nnuevo'), findsOneWidget);
@@ -15,7 +18,9 @@ void main() {
   testWidgets('auth provider buttons remain no-op controls', (
     WidgetTester tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const LlamallaApp());
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Continuar con Google'));
     await tester.tap(find.text('Ingresar con biometría'));
@@ -29,7 +34,9 @@ void main() {
   testWidgets('login validates required credentials locally', (
     WidgetTester tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const LlamallaApp());
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Iniciar sesión'));
     await tester.pump();
@@ -39,7 +46,9 @@ void main() {
   });
 
   testWidgets('opens the account creation screen', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const LlamallaApp());
+    await tester.pumpAndSettle();
 
     await tester.ensureVisible(find.text('Crear una cuenta'));
     await tester.tap(find.text('Crear una cuenta'));

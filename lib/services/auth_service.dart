@@ -34,7 +34,9 @@ class AuthService {
 
     final body = _decodeBody(response.body);
     _throwForError(response.statusCode, body, 'crear la cuenta');
-    return _tokensFrom(body);
+    final result = _tokensFrom(body);
+    await _saveTokens(result);
+    return result;
   }
 
   Future<AuthResult> login({
@@ -53,10 +55,137 @@ class AuthService {
     final body = _decodeBody(response.body);
     _throwForError(response.statusCode, body, 'iniciar sesión');
     final result = _tokensFrom(body);
+    await _saveTokens(result);
+    return result;
+  }
+
+  Future<bool> restoreSession() async {
+    final preferences = await SharedPreferences.getInstance();
+    final refreshToken = preferences.getString('refresh_token');
+    if (refreshToken == null || refreshToken.isEmpty) return false;
+
+    try {
+      await refresh();
+      return true;
+    } on AuthException {
+      await clearSession();
+      return false;
+    }
+  }
+
+  Future<AuthResult> refresh() async {
+    final preferences = await SharedPreferences.getInstance();
+    final refreshToken = preferences.getString('refresh_token');
+    if (refreshToken == null || refreshToken.isEmpty) {
+      throw const SessionExpiredException();
+    }
+
+    final response = await _client.post(
+      Uri.parse('$_baseUrl/auth/refresh'),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({'refreshToken': refreshToken}),
+    );
+    final body = _decodeBody(response.body);
+    _throwForError(response.statusCode, body, 'renovar la sesión');
+    final result = _tokensFrom(body);
+    await _saveTokens(result);
+    return result;
+  }
+
+  Future<void> logout() async {
+    final preferences = await SharedPreferences.getInstance();
+    final refreshToken = preferences.getString('refresh_token');
+    try {
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        final response = await _client.post(
+          Uri.parse('$_baseUrl/auth/logout'),
+          headers: const {'Content-Type': 'application/json'},
+          body: jsonEncode({'refreshToken': refreshToken}),
+        );
+        _throwForError(response.statusCode, _decodeBody(response.body), 'cerrar sesión');
+      }
+    } finally {
+      await clearSession();
+    }
+  }
+
+  Future<void> clearSession() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove('access_token');
+    await preferences.remove('refresh_token');
+  }
+
+  Future<http.Response> authenticatedRequest({
+    required String method,
+    required String path,
+    Map<String, String>? headers,
+    Object? body,
+  }) async {
+    final preferences = await SharedPreferences.getInstance();
+    var accessToken = preferences.getString('access_token');
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const SessionExpiredException();
+    }
+
+    Future<http.Response> send() {
+      return _send(
+        method: method,
+        path: path,
+        accessToken: accessToken!,
+        headers: headers,
+        body: body,
+      );
+    }
+
+    var response = await send();
+    if (response.statusCode != 401) return response;
+
+    late final AuthResult refreshed;
+    try {
+      refreshed = await refresh();
+    } on AuthException {
+      await clearSession();
+      throw const SessionExpiredException();
+    }
+    accessToken = refreshed.accessToken;
+    response = await send();
+    if (response.statusCode == 401) {
+      await clearSession();
+      throw const SessionExpiredException();
+    }
+    return response;
+  }
+
+  Future<http.Response> _send({
+    required String method,
+    required String path,
+    required String accessToken,
+    Map<String, String>? headers,
+    Object? body,
+  }) {
+    final requestHeaders = <String, String>{
+      'Authorization': 'Bearer $accessToken',
+      ...?headers,
+    };
+    final uri = Uri.parse('$_baseUrl$path');
+    switch (method.toUpperCase()) {
+      case 'GET':
+        return _client.get(uri, headers: requestHeaders);
+      case 'POST':
+        return _client.post(uri, headers: requestHeaders, body: body);
+      case 'PATCH':
+        return _client.patch(uri, headers: requestHeaders, body: body);
+      case 'DELETE':
+        return _client.delete(uri, headers: requestHeaders);
+      default:
+        throw ArgumentError.value(method, 'method', 'Unsupported HTTP method');
+    }
+  }
+
+  Future<void> _saveTokens(AuthResult result) async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString('access_token', result.accessToken);
     await preferences.setString('refresh_token', result.refreshToken);
-    return result;
   }
 
   void _throwForError(
@@ -118,4 +247,9 @@ class AuthException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class SessionExpiredException extends AuthException {
+  const SessionExpiredException()
+      : super(message: 'Tu sesión expiró. Inicia sesión nuevamente.', statusCode: 401);
 }

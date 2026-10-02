@@ -5,6 +5,7 @@ import 'activities_screen.dart';
 import 'friends_screen.dart';
 import 'home_screen.dart';
 import 'profile_placeholder_screen.dart';
+import '../services/auth_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,10 +24,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final screens = <Widget>[
-      HomeScreen(onOpenFlow: () => Navigator.pushNamed(context, '/activity/create')),
+      HomeScreen(
+        onOpenFlow: () => Navigator.pushNamed(context, '/activity/create'),
+      ),
       const FriendsScreen(),
-      ActivitiesScreen(onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail')),
-      const ProfilePlaceholderScreen(),
+      ActivitiesScreen(
+        onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail'),
+      ),
+      ProfilePlaceholderScreen(
+        onLogout: () async {
+          try {
+            await AuthService().logout();
+          } on AuthException catch (error) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(error.message)));
+            }
+          } finally {
+            if (context.mounted) {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/login',
+                (_) => false,
+              );
+            }
+          }
+        },
+      ),
     ];
 
     return Scaffold(
