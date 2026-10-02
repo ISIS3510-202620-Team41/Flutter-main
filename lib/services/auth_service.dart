@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
   AuthService({
@@ -32,13 +33,45 @@ class AuthService {
     );
 
     final body = _decodeBody(response.body);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AuthException(
-        message: body['message'] as String? ?? 'No fue posible crear la cuenta.',
-        statusCode: response.statusCode,
-      );
-    }
+    _throwForError(response.statusCode, body, 'crear la cuenta');
+    return _tokensFrom(body);
+  }
 
+  Future<AuthResult> login({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _client.post(
+      Uri.parse('$_baseUrl/auth/login'),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+      }),
+    );
+
+    final body = _decodeBody(response.body);
+    _throwForError(response.statusCode, body, 'iniciar sesión');
+    final result = _tokensFrom(body);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString('access_token', result.accessToken);
+    await preferences.setString('refresh_token', result.refreshToken);
+    return result;
+  }
+
+  void _throwForError(
+    int statusCode,
+    Map<String, dynamic> body,
+    String action,
+  ) {
+    if (statusCode >= 200 && statusCode < 300) return;
+    throw AuthException(
+      message: body['message'] as String? ?? 'No fue posible $action.',
+      statusCode: statusCode,
+    );
+  }
+
+  AuthResult _tokensFrom(Map<String, dynamic> body) {
     final accessToken = body['accessToken'];
     final refreshToken = body['refreshToken'];
     if (accessToken is! String || refreshToken is! String) {
@@ -46,8 +79,7 @@ class AuthService {
         message: 'La respuesta del servidor no es válida.',
       );
     }
-
-    return RegistrationResult(
+    return AuthResult(
       accessToken: accessToken,
       refreshToken: refreshToken,
     );
@@ -63,8 +95,8 @@ class AuthService {
   }
 }
 
-class RegistrationResult {
-  const RegistrationResult({
+class AuthResult {
+  const AuthResult({
     required this.accessToken,
     required this.refreshToken,
   });
@@ -72,6 +104,8 @@ class RegistrationResult {
   final String accessToken;
   final String refreshToken;
 }
+
+typedef RegistrationResult = AuthResult;
 
 class AuthException implements Exception {
   const AuthException({

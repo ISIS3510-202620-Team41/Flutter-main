@@ -26,6 +26,18 @@ void main() {
     expect(find.text('Actividad ya'), findsOneWidget);
   });
 
+  testWidgets('login validates required credentials locally', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const LlamallaApp());
+
+    await tester.tap(find.text('Iniciar sesión'));
+    await tester.pump();
+
+    expect(find.text('Escribe un correo válido.'), findsOneWidget);
+    expect(find.text('Escribe tu contraseña.'), findsOneWidget);
+  });
+
   testWidgets('opens the account creation screen', (WidgetTester tester) async {
     await tester.pumpWidget(const LlamallaApp());
 
