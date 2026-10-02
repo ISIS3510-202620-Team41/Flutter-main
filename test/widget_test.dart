@@ -1,29 +1,61 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llamalla/app.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('shows the Figma auth entry screen', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const LlamallaApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Actividad ya'), findsOneWidget);
+    expect(find.text('Qué bueno verte de\nnuevo'), findsOneWidget);
+    expect(find.text('Continuar con Google'), findsOneWidget);
+    expect(find.text('Ingresar con biometría'), findsOneWidget);
+    expect(find.text('Crear una cuenta'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('auth provider buttons remain no-op controls', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const LlamallaApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continuar con Google'));
+    await tester.tap(find.text('Ingresar con biometría'));
+    await tester.tap(find.text('Iniciar sesión'));
+    await tester.tap(find.text('Crear una cuenta'));
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Actividad ya'), findsOneWidget);
+  });
+
+  testWidgets('login validates required credentials locally', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const LlamallaApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Iniciar sesión'));
+    await tester.pump();
+
+    expect(find.text('Escribe un correo válido.'), findsOneWidget);
+    expect(find.text('Escribe tu contraseña.'), findsOneWidget);
+  });
+
+  testWidgets('opens the account creation screen', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const LlamallaApp());
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Crear una cuenta'));
+    await tester.tap(find.text('Crear una cuenta'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Crea tu perfil'), findsOneWidget);
+    expect(find.text('Crear cuenta'), findsOneWidget);
+    expect(find.text('¿Ya tienes perfil? '), findsOneWidget);
   });
 }

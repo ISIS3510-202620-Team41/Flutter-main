@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/app_bottom_nav.dart';
-//import 'activities_screen.dart';
+import 'activities_screen.dart';
 import 'friends_screen.dart';
 import 'home_screen.dart';
-import 'profile_screen.dart';
+import 'profile_placeholder_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,11 +23,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final screens = <Widget>[
-      HomeScreen(onOpenFlow: () => Navigator.pushNamed(context, '/activity/create')),
+      HomeScreen(
+        onOpenFlow: () => Navigator.pushNamed(context, '/activity/create'),
+      ),
       const FriendsScreen(),
-      //ActivitiesScreen(onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail')),
-      const Center(child: Text('Actividades')),                                        // (temporal)
-      const ProfileScreen(),
+      ActivitiesScreen(onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail')),
+      const ProfilePlaceholderScreen(),
     ];
 
     return Scaffold(
