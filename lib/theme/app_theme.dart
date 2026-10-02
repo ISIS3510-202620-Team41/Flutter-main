@@ -54,7 +54,7 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         height: 70,
         backgroundColor: AppColors.white,
-        indicatorColor: AppColors.rosewood.withOpacity(0.10),
+        indicatorColor: AppColors.rosewood.withValues(alpha: 0.10),
         labelTextStyle: WidgetStatePropertyAll(
           const TextStyle(fontSize: 11),
         ),
