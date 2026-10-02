@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../widgets/app_bottom_nav.dart';
-import 'activities_screen.dart';
+//import 'activities_screen.dart';
 import 'friends_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
