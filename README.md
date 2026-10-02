@@ -12,6 +12,22 @@ A few resources to get you started if this is your first Flutter project:
 - [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
 - [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
 
+## Backend user creation
+
+The account creation screen calls `POST /api/auth/register` on the Backend
+
+The default API URL targets an Android emulator:
+
+```text
+http://10.0.2.2:8080/api
+```
+
+For a physical device, provide the development machine's local network address:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://<your-pc-ip>:8080/api
+```
+
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.

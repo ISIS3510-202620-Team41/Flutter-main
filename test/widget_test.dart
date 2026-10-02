@@ -25,4 +25,16 @@ void main() {
 
     expect(find.text('Actividad ya'), findsOneWidget);
   });
+
+  testWidgets('opens the account creation screen', (WidgetTester tester) async {
+    await tester.pumpWidget(const LlamallaApp());
+
+    await tester.ensureVisible(find.text('Crear una cuenta'));
+    await tester.tap(find.text('Crear una cuenta'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Crea tu perfil'), findsOneWidget);
+    expect(find.text('Crear cuenta'), findsOneWidget);
+    expect(find.text('¿Ya tienes perfil? '), findsOneWidget);
+  });
 }
