@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
@@ -17,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
   bool _obscurePassword = true;
   bool _isSubmitting = false;
+  bool _isGoogleSubmitting = false;
   String? _errorMessage;
 
   @override
@@ -53,6 +55,35 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _submitGoogle() async {
+    setState(() {
+      _isGoogleSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _authService.loginWithGoogle();
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/');
+    } on GoogleSignInException catch (error) {
+      if (!mounted || error.code == GoogleSignInExceptionCode.canceled) return;
+      setState(
+        () => _errorMessage = 'No fue posible iniciar sesión con Google.',
+      );
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      setState(() => _errorMessage = error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+        () => _errorMessage =
+            'No pudimos conectar con el servidor. Intenta de nuevo.',
+      );
+    } finally {
+      if (mounted) setState(() => _isGoogleSubmitting = false);
     }
   }
 
@@ -175,7 +206,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 50,
                   child: FilledButton(
-                    onPressed: _isSubmitting ? null : _submit,
+                    onPressed: _isSubmitting || _isGoogleSubmitting
+                        ? null
+                        : _submit,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.rosewood,
                       disabledBackgroundColor: AppColors.rosewood,
@@ -209,16 +242,24 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 48,
                   child: OutlinedButton.icon(
-                    onPressed: () {},
+                    onPressed: _isGoogleSubmitting || _isSubmitting
+                        ? null
+                        : _submitGoogle,
                     icon: const _GoogleMark(),
-                    label: const Text(
-                      'Continuar con Google',
-                      style: TextStyle(
-                        color: AppColors.black,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    label: _isGoogleSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Continuar con Google',
+                            style: TextStyle(
+                              color: AppColors.black,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                     style: OutlinedButton.styleFrom(
                       backgroundColor: AppColors.white,
                       disabledForegroundColor: AppColors.black,

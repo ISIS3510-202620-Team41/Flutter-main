@@ -28,6 +28,27 @@ For a physical device, provide the development machine's local network address:
 flutter run --dart-define=API_BASE_URL=http://<your-pc-ip>:8080/api
 ```
 
+## Google sign-in
+
+The Android Google button authenticates with the native Google Sign-In SDK,
+then sends the Google ID token to `POST /api/auth/google`. The backend must
+verify the token and return the same token response used by password login.
+
+For this Android-only app, provide the OAuth web/server client ID at runtime;
+do not commit it:
+
+```bash
+flutter run --dart-define=GOOGLE_SERVER_CLIENT_ID=<your-web-client-id>
+```
+
+The Android application must also be registered in Google Cloud with the
+package name `com.example.llamalla` and the SHA-1 certificate for the build
+you are using. The backend must use the web/server client ID as the token
+audience and verify the signature, issuer, audience, expiration, and identity
+claims before issuing the application's access and refresh tokens.
+
+This implementation does not require iOS, macOS, or web configuration.
+
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.

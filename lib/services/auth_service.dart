@@ -1,18 +1,29 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+final Future<void> _googleSignInInitialization = GoogleSignIn.instance
+    .initialize(
+      serverClientId:
+          const String.fromEnvironment(
+            'GOOGLE_SERVER_CLIENT_ID',
+            defaultValue: '',
+          ).isEmpty
+          ? null
+          : const String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID'),
+    );
+
 class AuthService {
-  AuthService({
-    http.Client? client,
-    String? baseUrl,
-  })  : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'API_BASE_URL',
-              defaultValue: 'http://10.0.2.2:8080/api',
-            );
+  AuthService({http.Client? client, String? baseUrl})
+    : _client = client ?? http.Client(),
+      _baseUrl =
+          baseUrl ??
+          const String.fromEnvironment(
+            'API_BASE_URL',
+            defaultValue: 'http://10.0.2.2:8080/api',
+          );
 
   final http.Client _client;
   final String _baseUrl;
@@ -25,11 +36,7 @@ class AuthService {
     final response = await _client.post(
       Uri.parse('$_baseUrl/auth/register'),
       headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'password': password,
-      }),
+      body: jsonEncode({'name': name, 'email': email, 'password': password}),
     );
 
     final body = _decodeBody(response.body);
@@ -46,14 +53,41 @@ class AuthService {
     final response = await _client.post(
       Uri.parse('$_baseUrl/auth/login'),
       headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email,
-        'password': password,
-      }),
+      body: jsonEncode({'email': email, 'password': password}),
     );
 
     final body = _decodeBody(response.body);
     _throwForError(response.statusCode, body, 'iniciar sesión');
+    final result = _tokensFrom(body);
+    await _saveTokens(result);
+    return result;
+  }
+
+  Future<AuthResult> loginWithGoogle() async {
+    await _googleSignInInitialization;
+    final account = await GoogleSignIn.instance.authenticate();
+    final idToken = account.authentication.idToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw const AuthException(
+        message: 'Google no devolvió un token de identidad.',
+      );
+    }
+    return exchangeGoogleIdToken(idToken);
+  }
+
+  Future<AuthResult> exchangeGoogleIdToken(String idToken) async {
+    if (idToken.trim().isEmpty) {
+      throw const AuthException(
+        message: 'Google no devolvió un token de identidad.',
+      );
+    }
+    final response = await _client.post(
+      Uri.parse('$_baseUrl/auth/google'),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({'idToken': idToken}),
+    );
+    final body = _decodeBody(response.body);
+    _throwForError(response.statusCode, body, 'iniciar sesión con Google');
     final result = _tokensFrom(body);
     await _saveTokens(result);
     return result;
@@ -102,7 +136,11 @@ class AuthService {
           headers: const {'Content-Type': 'application/json'},
           body: jsonEncode({'refreshToken': refreshToken}),
         );
-        _throwForError(response.statusCode, _decodeBody(response.body), 'cerrar sesión');
+        _throwForError(
+          response.statusCode,
+          _decodeBody(response.body),
+          'cerrar sesión',
+        );
       }
     } finally {
       await clearSession();
@@ -208,10 +246,7 @@ class AuthService {
         message: 'La respuesta del servidor no es válida.',
       );
     }
-    return AuthResult(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-    );
+    return AuthResult(accessToken: accessToken, refreshToken: refreshToken);
   }
 
   Map<String, dynamic> _decodeBody(String value) {
@@ -225,10 +260,7 @@ class AuthService {
 }
 
 class AuthResult {
-  const AuthResult({
-    required this.accessToken,
-    required this.refreshToken,
-  });
+  const AuthResult({required this.accessToken, required this.refreshToken});
 
   final String accessToken;
   final String refreshToken;
@@ -237,10 +269,7 @@ class AuthResult {
 typedef RegistrationResult = AuthResult;
 
 class AuthException implements Exception {
-  const AuthException({
-    required this.message,
-    this.statusCode,
-  });
+  const AuthException({required this.message, this.statusCode});
 
   final String message;
   final int? statusCode;
@@ -251,5 +280,8 @@ class AuthException implements Exception {
 
 class SessionExpiredException extends AuthException {
   const SessionExpiredException()
-      : super(message: 'Tu sesión expiró. Inicia sesión nuevamente.', statusCode: 401);
+    : super(
+        message: 'Tu sesión expiró. Inicia sesión nuevamente.',
+        statusCode: 401,
+      );
 }

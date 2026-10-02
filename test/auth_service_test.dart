@@ -58,6 +58,33 @@ void main() {
     );
   });
 
+  test('Google token exchange posts the ID token and stores app tokens',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final client = MockClient((request) async {
+      expect(request.method, 'POST');
+      expect(request.url.toString(), 'http://test/api/auth/google');
+      expect(jsonDecode(request.body), {'idToken': 'google-id-token'});
+      return http.Response(
+        jsonEncode({
+          'accessToken': 'google-access-token',
+          'refreshToken': 'google-refresh-token',
+        }),
+        200,
+      );
+    });
+
+    final result = await AuthService(
+      client: client,
+      baseUrl: 'http://test/api',
+    ).exchangeGoogleIdToken('google-id-token');
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(result.accessToken, 'google-access-token');
+    expect(preferences.getString('access_token'), 'google-access-token');
+    expect(preferences.getString('refresh_token'), 'google-refresh-token');
+  });
+
   test('refresh rotates and persists the returned token pair', () async {
     SharedPreferences.setMockInitialValues({
       'refresh_token': 'old-refresh-token',
