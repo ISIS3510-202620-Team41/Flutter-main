@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
-import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../viewmodels/auth_view_models.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,16 +14,14 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
+  late final LoginViewModel _viewModel = LoginViewModel();
   bool _obscurePassword = true;
-  bool _isSubmitting = false;
-  bool _isGoogleSubmitting = false;
-  String? _errorMessage;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
@@ -32,66 +29,23 @@ class _LoginScreenState extends State<LoginScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    setState(() {
-      _isSubmitting = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await _authService.login(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      if (!mounted) return;
-      authSession.setAuthenticated();
-      Navigator.pushReplacementNamed(context, '/');
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      setState(() => _errorMessage = error.message);
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-        () => _errorMessage =
-            'No pudimos conectar con el servidor. Intenta de nuevo.',
-      );
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
-    }
+    final success = await _viewModel.login(
+      _emailController.text,
+      _passwordController.text,
+    );
+    if (success && mounted) Navigator.pushReplacementNamed(context, '/');
   }
 
   Future<void> _submitGoogle() async {
-    setState(() {
-      _isGoogleSubmitting = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await _authService.loginWithGoogle();
-      if (!mounted) return;
-      authSession.setAuthenticated();
-      Navigator.pushReplacementNamed(context, '/');
-    } on GoogleSignInException catch (error) {
-      if (!mounted || error.code == GoogleSignInExceptionCode.canceled) return;
-      setState(
-        () => _errorMessage = 'No fue posible iniciar sesión con Google.',
-      );
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      setState(() => _errorMessage = error.message);
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-        () => _errorMessage =
-            'No pudimos conectar con el servidor. Intenta de nuevo.',
-      );
-    } finally {
-      if (mounted) setState(() => _isGoogleSubmitting = false);
-    }
+    final success = await _viewModel.loginWithGoogle();
+    if (success && mounted) Navigator.pushReplacementNamed(context, '/');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AnimatedBuilder(
+      animation: _viewModel,
+      builder: (context, _) => Scaffold(
       backgroundColor: const Color(0xFFF5FBFF),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -193,10 +147,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       ? 'Escribe tu contraseña.'
                       : null,
                 ),
-                if (_errorMessage != null) ...[
+                if (_viewModel.errorMessage != null) ...[
                   const SizedBox(height: 14),
                   Text(
-                    _errorMessage!,
+                    _viewModel.errorMessage!,
                     style: const TextStyle(
                       color: AppColors.rosewood,
                       fontSize: 12,
@@ -208,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 50,
                   child: FilledButton(
-                    onPressed: _isSubmitting || _isGoogleSubmitting
+                    onPressed: _viewModel.isSubmitting || _viewModel.isGoogleSubmitting
                         ? null
                         : _submit,
                     style: FilledButton.styleFrom(
@@ -219,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: _isSubmitting
+                    child: _viewModel.isSubmitting
                         ? const SizedBox(
                             width: 20,
                             height: 20,
@@ -244,11 +198,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 48,
                   child: OutlinedButton.icon(
-                    onPressed: _isGoogleSubmitting || _isSubmitting
+                    onPressed: _viewModel.isGoogleSubmitting || _viewModel.isSubmitting
                         ? null
                         : _submitGoogle,
                     icon: const _GoogleMark(),
-                    label: _isGoogleSubmitting
+                    label: _viewModel.isGoogleSubmitting
                         ? const SizedBox(
                             width: 18,
                             height: 18,
@@ -338,6 +292,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -365,7 +320,7 @@ class _BrandHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Actividad ya',
+              'Llamalla',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
             SizedBox(height: 2),

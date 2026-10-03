@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../viewmodels/auth_view_models.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -15,16 +15,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
+  late final RegisterViewModel _viewModel = RegisterViewModel();
   bool _obscurePassword = true;
-  bool _isSubmitting = false;
-  String? _errorMessage;
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _viewModel.dispose();
     super.dispose();
   }
 
@@ -32,41 +31,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    setState(() {
-      _isSubmitting = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await _authService.register(
-        name: _nameController.text.trim(),
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      await _authService.clearSession();
-      authSession.setUnauthenticated();
-      if (!mounted) return;
+    final success = await _viewModel.register(
+      _nameController.text,
+      _emailController.text,
+      _passwordController.text,
+    );
+    if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cuenta creada correctamente.')),
       );
       Navigator.pushReplacementNamed(context, '/login');
-    } on AuthException catch (error) {
-      if (!mounted) return;
-      setState(() => _errorMessage = error.message);
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-        () => _errorMessage =
-            'No pudimos conectar con el servidor. Intenta de nuevo.',
-      );
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AnimatedBuilder(
+      animation: _viewModel,
+      builder: (context, _) => Scaffold(
       backgroundColor: const Color(0xFFF5FBFF),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -171,10 +153,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ? 'Usa al menos 8 caracteres.'
                       : null,
                 ),
-                if (_errorMessage != null) ...[
+                if (_viewModel.errorMessage != null) ...[
                   const SizedBox(height: 14),
                   Text(
-                    _errorMessage!,
+                    _viewModel.errorMessage!,
                     style: const TextStyle(
                       color: AppColors.rosewood,
                       fontSize: 12,
@@ -186,7 +168,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   width: double.infinity,
                   height: 50,
                   child: FilledButton(
-                    onPressed: _isSubmitting ? null : _submit,
+                    onPressed: _viewModel.isSubmitting ? null : _submit,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.rosewood,
                       disabledBackgroundColor:
@@ -195,7 +177,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: _isSubmitting
+                    child: _viewModel.isSubmitting
                         ? const SizedBox(
                             width: 20,
                             height: 20,
@@ -249,6 +231,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 }
@@ -278,7 +261,7 @@ class _RegisterBrandHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Actividad ya',
+              'Llamalla',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
             SizedBox(height: 2),
