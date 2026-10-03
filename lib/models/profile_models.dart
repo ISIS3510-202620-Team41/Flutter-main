@@ -90,3 +90,16 @@ class GoogleSyncResult {
     );
   }
 }
+
+class GoogleConnectionStatus {
+  const GoogleConnectionStatus({required this.connected});
+
+  final bool connected;
+
+  factory GoogleConnectionStatus.fromJson(Map<String, dynamic> json) {
+    if (json['connected'] is! bool) {
+      throw const FormatException('El estado de Google Calendar no es válido.');
+    }
+    return GoogleConnectionStatus(connected: json['connected'] as bool);
+  }
+}

@@ -100,8 +100,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadSchedule() async {
     try {
-      final refresh = await _scheduleService.refreshGoogle();
-      _googleConnected = refresh.calendars > 0;
+      final status = await _scheduleService.getGoogleStatus();
+      _googleConnected = status.connected;
     } on ScheduleException {
       _googleConnected = false;
     }
@@ -121,10 +121,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isSyncing = true);
     try {
       final authorization = await GoogleSignIn.instance.authorizationClient
-          .authorizeServer(const ['https://www.googleapis.com/auth/calendar.readonly']);
+          .authorizeServer(const [
+            'https://www.googleapis.com/auth/calendar.readonly',
+          ]);
       final authCode = authorization?.serverAuthCode;
       if (authCode == null || authCode.isEmpty) {
-        throw const ScheduleException('Google no devolvió un código de autorización.');
+        throw const ScheduleException(
+          'Google no devolvió un código de autorización.',
+        );
       }
       await _scheduleService.syncGoogle(authCode: authCode);
       await _loadSchedule();
@@ -195,9 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final dayGaps = _weekGaps
         .where((gaps) => gaps.date == _weekdays[selectedDay])
@@ -438,8 +440,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }),
                   ),
                   const SizedBox(height: 14),
-                  if (dayGaps.isEmpty)
-                    _emptySchedule(),
+                  if (dayGaps.isEmpty) _emptySchedule(),
                   ...dayGaps.map(classCard),
                 ],
               ),
@@ -489,9 +490,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       style: OutlinedButton.styleFrom(
         foregroundColor: _googleConnected ? AppColors.green : AppColors.blue,
         side: BorderSide(
-          color: _googleConnected
-              ? const Color(0xFFBDE8CE)
-              : AppColors.blue,
+          color: _googleConnected ? const Color(0xFFBDE8CE) : AppColors.blue,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       ),
@@ -582,23 +581,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                         Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.green,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'LIBRE',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.green,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'LIBRE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -712,5 +711,4 @@ class _CalendarSyncSheet extends StatelessWidget {
       ),
     );
   }
-
 }

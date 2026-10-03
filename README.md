@@ -70,6 +70,9 @@ read-only mode. Flutter obtains a Google server authorization code and sends
 it to the backend; provider access and refresh tokens remain on the backend.
 The client expects these endpoints under `/api`:
 
+- `GET /schedules/google/status` returns `{ "connected": true|false }`
+  based on whether the authenticated user has a stored Google connection.
+  This check does not contact Google and does not expose provider tokens.
 - `POST /schedules/sync/google` with `{ "authCode": "..." }` imports or
   refreshes the user's Google busy time blocks. The optional `tz` query
   parameter controls timezone conversion.
@@ -82,6 +85,12 @@ The profile renders the returned free intervals for Monday through Friday.
 When the backend has no schedule data, it shows an empty state rather than
 falling back to mock events. Activities remain local to the existing
 Activities screen and are not modified by calendar synchronization.
+
+Google calendar event details are not stored on the device. The Backend
+converts relevant Google events into `TimeBlock` records, replacing only the
+user's existing `GOOGLE_CALENDAR` blocks during synchronization. Free
+intervals are calculated from those time blocks; other schedule sources, such
+as ICS blocks, are preserved.
 
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,

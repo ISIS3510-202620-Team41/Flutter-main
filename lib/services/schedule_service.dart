@@ -21,6 +21,13 @@ class ScheduleService {
 
   final AuthService _authService;
 
+  Future<GoogleConnectionStatus> getGoogleStatus() async {
+    final response = await _request('GET', '/schedules/google/status');
+    return GoogleConnectionStatus.fromJson(
+      _decode(response, 'consultar la conexión de Google Calendar'),
+    );
+  }
+
   Future<GoogleSyncResult> syncGoogle({
     required String authCode,
     String timezone = 'America/Bogota',
