@@ -123,6 +123,7 @@ class ActivityService {
         message = decoded['message'] as String;
       }
     } on FormatException {
+      // Use the generic message when the backend response is not JSON.
     }
     throw ActivityException(message, statusCode: response.statusCode);
   }
