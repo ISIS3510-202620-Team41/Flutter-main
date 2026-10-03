@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
+import '../services/analytics_service.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'activities_screen.dart';
 import 'friends_screen.dart';
@@ -18,6 +20,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onDestinationSelected(int index) {
     setState(() => _index = index);
+    const screens = ['Home', 'FriendAvailability', 'Activities', 'Profile'];
+    unawaited(
+      AnalyticsService.instance.track('screen_view', {
+        'screen': screens[index],
+      }),
+    );
+    AnalyticsService.instance.setCurrentScreen(screens[index]);
   }
 
   @override
@@ -27,7 +36,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onOpenFlow: () => Navigator.pushNamed(context, '/activity/create'),
       ),
       const FriendsScreen(),
-      ActivitiesScreen(onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail')),
+      ActivitiesScreen(
+        onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail'),
+      ),
       const ProfileScreen(),
     ];
 

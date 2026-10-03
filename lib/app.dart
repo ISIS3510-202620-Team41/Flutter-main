@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'services/analytics_service.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/activity_detail_screen.dart';
@@ -25,20 +27,50 @@ class LlamallaApp extends StatefulWidget {
   State<LlamallaApp> createState() => _LlamallaAppState();
 }
 
-class _LlamallaAppState extends State<LlamallaApp> {
+class _LlamallaAppState extends State<LlamallaApp>
+    with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late final Future<bool> _sessionFuture = _restoreSession();
+  final _startupStopwatch = Stopwatch()..start();
+  late final Timer _analyticsTimer;
+  bool _startupTracked = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     authSession.addListener(_onAuthChanged);
+    _analyticsTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => unawaited(AnalyticsService.instance.flush()),
+    );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _analyticsTimer.cancel();
     authSession.removeListener(_onAuthChanged);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(AnalyticsService.instance.flush());
+    }
+  }
+
+  void _trackStartup() {
+    if (_startupTracked) return;
+    _startupTracked = true;
+    unawaited(
+      AnalyticsService.instance.track('app_loading_time', {
+        'loadType': 'cold_start',
+        'durationMs': _startupStopwatch.elapsedMilliseconds,
+      }),
+    );
   }
 
   void _onAuthChanged() {
@@ -79,6 +111,13 @@ class _LlamallaAppState extends State<LlamallaApp> {
             title: 'ActiYa',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
+            navigatorObservers: [AnalyticsNavigatorObserver()],
+            builder: (context, child) {
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => _trackStartup(),
+              );
+              return child ?? const SizedBox.shrink();
+            },
             home: authSession.isAuthenticated == true
                 ? const DashboardScreen()
                 : const LoginScreen(),
