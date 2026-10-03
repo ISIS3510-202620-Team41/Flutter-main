@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import '../models/profile_models.dart';
 import '../services/auth_service.dart';
+import '../services/profile_service.dart';
+import '../services/schedule_service.dart';
 import '../theme/app_theme.dart';
 import 'edit_profile_sheet.dart';
 
@@ -12,58 +16,38 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
+  final _profileService = ProfileService();
+  final _scheduleService = ScheduleService();
   bool _isLoggingOut = false;
-
-  // User data, hardcoded for now, later it comes from the database
-  String name = 'Juan García';
-  String description =
-      'Estudiante de Diseño · 5to semestre · Me gusta el café ☕ y el código 💻';
+  bool _isLoading = true;
+  bool _isSyncing = false;
+  bool _googleConnected = false;
+  String? _errorMessage;
+  UserProfile? _profile;
 
   final List<String> days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
-  int selectedDay = 3;
+  int selectedDay = (DateTime.now().weekday - 1).clamp(0, 4);
+  late final List<DateTime> _weekdays = _currentWeekdays();
+  List<DayGaps> _weekGaps = const [];
 
-  final List<List<Map<String, dynamic>>> schedule = [
-    [
-      {
-        'title': 'Cálculo',
-        'time': '07:00 - 09:00',
-        'room': 'Sal. 201',
-        'free': false,
-      },
-      {'title': 'Libre', 'time': '09:00 - 12:00', 'room': '', 'free': true},
-    ],
-    [
-      {
-        'title': 'Diseño',
-        'time': '10:00 - 12:00',
-        'room': 'Sal. 310',
-        'free': false,
-      },
-    ],
-    [
-      {
-        'title': 'Física',
-        'time': '09:00 - 11:00',
-        'room': 'Sal. 104',
-        'free': false,
-      },
-    ],
-    [
-      {
-        'title': 'Estadística',
-        'time': '08:00 - 10:00',
-        'room': 'Sal. 105',
-        'free': false,
-      },
-      {'title': 'Libre', 'time': '10:00 - 13:00', 'room': '', 'free': true},
-    ],
-    [
-      {'title': 'Libre', 'time': '08:00 - 12:00', 'room': '', 'free': true},
-    ],
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  List<DateTime> _currentWeekdays() {
+    final today = DateTime.now();
+    final monday = today.subtract(Duration(days: today.weekday - 1));
+    return List.generate(5, (index) {
+      final date = monday.add(Duration(days: index));
+      return DateTime(date.year, date.month, date.day);
+    });
+  }
 
   String get initials {
-    final parts = name.trim().split(' ');
+    final parts = (_profile?.name ?? '').trim().split(' ');
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
     String letters = parts[0][0];
     if (parts.length > 1) letters += parts[1][0];
     return letters.toUpperCase();
@@ -72,15 +56,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void openEdit() {
     showEditProfile(
       context: context,
-      currentName: name,
-      currentDescription: description,
-      onSave: (newName, newDescription) {
-        setState(() {
-          name = newName;
-          description = newDescription;
-        });
+      currentName: _profile?.name ?? '',
+      currentDescription: _profile?.bio ?? '',
+      onSave: (newName, newDescription) async {
+        try {
+          final profile = await _profileService.updateProfile(
+            name: newName.trim(),
+            bio: newDescription.trim(),
+          );
+          if (mounted) setState(() => _profile = profile);
+        } on ProfileException catch (error) {
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(error.message)));
+          }
+        }
       },
     );
+  }
+
+  Future<void> _loadProfile() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final profile = await _profileService.getCurrentUser();
+      await _loadSchedule();
+      if (!mounted) return;
+      setState(() {
+        _profile = profile;
+        _isLoading = false;
+      });
+    } on ProfileException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.message;
+      });
+    }
+  }
+
+  Future<void> _loadSchedule() async {
+    try {
+      final status = await _scheduleService.getGoogleStatus();
+      _googleConnected = status.connected;
+    } on ScheduleException {
+      _googleConnected = false;
+    }
+
+    final gaps = <DayGaps>[];
+    for (final date in _weekdays) {
+      try {
+        gaps.add(await _scheduleService.getGaps(date: date));
+      } on ScheduleException {
+        // An unavailable schedule is rendered as an empty state.
+      }
+    }
+    _weekGaps = gaps;
+  }
+
+  Future<void> _connectCalendar() async {
+    setState(() => _isSyncing = true);
+    try {
+      final authorization = await GoogleSignIn.instance.authorizationClient
+          .authorizeServer(const [
+            'https://www.googleapis.com/auth/calendar.readonly',
+          ]);
+      final authCode = authorization?.serverAuthCode;
+      if (authCode == null || authCode.isEmpty) {
+        throw const ScheduleException(
+          'Google no devolvió un código de autorización.',
+        );
+      }
+      await _scheduleService.syncGoogle(authCode: authCode);
+      await _loadSchedule();
+      if (mounted) Navigator.pop(context);
+    } on ScheduleException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   Future<void> _logout() async {
@@ -95,15 +156,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } finally {
       authSession.setUnauthenticated();
-      if (!mounted) return;
-      setState(() => _isLoggingOut = false);
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+      }
     }
+  }
+
+  Future<void> _refreshCalendar() async {
+    setState(() => _isSyncing = true);
+    try {
+      await _scheduleService.refreshGoogle();
+      await _loadSchedule();
+      if (mounted) Navigator.pop(context);
+    } on ScheduleException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  void _openCalendarSync() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _CalendarSyncSheet(
+        connected: _googleConnected,
+        isLoading: _isSyncing,
+        onConnect: _connectCalendar,
+        onRefresh: _refreshCalendar,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final dayItems = schedule[selectedDay];
-    final freeWindows = dayItems.where((c) => c['free'] == true).length;
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final dayGaps = _weekGaps
+        .where((gaps) => gaps.date == _weekdays[selectedDay])
+        .expand((gaps) => gaps.free)
+        .toList(growable: false);
+    final freeWindows = dayGaps.length;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -165,7 +267,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              name,
+                              _profile?.name ?? '',
                               style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w700,
@@ -173,7 +275,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              description,
+                              _profile?.bio ?? '',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF4A5A66),
@@ -226,9 +328,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Row(
                       children: [
-                        statItem(Icons.bolt, '12', 'Actividades'),
-                        statItem(Icons.people, '8', 'Amigos'),
-                        statItem(Icons.hourglass_bottom, '6h', 'Horas libres'),
+                        statItem(Icons.bolt, '—', 'Actividades'),
+                        statItem(Icons.people, '—', 'Amigos'),
+                        statItem(
+                          Icons.hourglass_bottom,
+                          _hoursFor(dayGaps),
+                          'Horas libres',
+                        ),
                       ],
                     ),
                   ),
@@ -286,8 +392,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                       ),
+                      _calendarAction(),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  if (_errorMessage != null) _calendarError(_errorMessage!),
                   const SizedBox(height: 14),
                   // The day buttons
                   Row(
@@ -331,7 +440,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }),
                   ),
                   const SizedBox(height: 14),
-                  ...dayItems.map((item) => classCard(item)),
+                  if (dayGaps.isEmpty) _emptySchedule(),
+                  ...dayGaps.map(classCard),
                 ],
               ),
             ),
@@ -360,25 +470,99 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget classCard(Map<String, dynamic> item) {
-    final bool isFree = item['free'];
-    final Color borderColor = isFree ? AppColors.green : AppColors.blue;
+  Widget _calendarAction() {
+    return OutlinedButton.icon(
+      onPressed: _isSyncing ? null : _openCalendarSync,
+      icon: Icon(
+        _googleConnected
+            ? Icons.check_circle_outline
+            : Icons.calendar_month_outlined,
+        size: 16,
+      ),
+      label: Text(
+        _isSyncing
+            ? 'Sincronizando...'
+            : _googleConnected
+            ? 'Google Calendar'
+            : 'Conectar calendario',
+        style: const TextStyle(fontSize: 11),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: _googleConnected ? AppColors.green : AppColors.blue,
+        side: BorderSide(
+          color: _googleConnected ? const Color(0xFFBDE8CE) : AppColors.blue,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
+    );
+  }
 
+  Widget _calendarError(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptySchedule() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+      child: Column(
+        children: [
+          Icon(Icons.event_busy_outlined, size: 36, color: AppColors.grey),
+          SizedBox(height: 10),
+          Text(
+            'No hay bloques de horario para este día.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: AppColors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _hoursFor(List<FreeInterval> gaps) {
+    final minutes = gaps.fold<int>(
+      0,
+      (total, gap) => total + gap.end.difference(gap.start).inMinutes,
+    );
+    return '${(minutes / 60).toStringAsFixed(1)}h';
+  }
+
+  String _time(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  Widget classCard(FreeInterval interval) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: isFree ? AppColors.greenLight : Colors.white,
+        color: AppColors.greenLight,
         borderRadius: BorderRadius.circular(14),
-        border: isFree ? Border.all(color: const Color(0xFFBDE8CE)) : null,
-        boxShadow: isFree
-            ? null
-            : const [BoxShadow(color: Color(0x14000000), blurRadius: 8)],
+        border: Border.all(color: const Color(0xFFBDE8CE)),
       ),
       child: IntrinsicHeight(
         child: Row(
           children: [
-            Container(width: 4, color: borderColor),
+            Container(width: 4, color: AppColors.green),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -389,32 +573,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          item['title'],
-                          style: TextStyle(
+                          'Ventana libre',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: isFree ? AppColors.green : Colors.black,
+                            color: AppColors.green,
                           ),
                         ),
-                        if (isFree)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.green,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'LIBRE',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.green,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'LIBRE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -427,22 +610,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          item['time'],
+                          '${_time(interval.start)} - ${_time(interval.end)}',
                           style: const TextStyle(fontSize: 13),
                         ),
-                        if (item['room'] != '') ...[
-                          const SizedBox(width: 14),
-                          const Icon(
-                            Icons.meeting_room_outlined,
-                            size: 14,
-                            color: AppColors.grey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            item['room'],
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ],
                       ],
                     ),
                   ],
@@ -451,6 +621,93 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CalendarSyncSheet extends StatelessWidget {
+  const _CalendarSyncSheet({
+    required this.connected,
+    required this.isLoading,
+    required this.onConnect,
+    required this.onRefresh,
+  });
+
+  final bool connected;
+  final bool isLoading;
+  final VoidCallback onConnect;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        12,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD5D9DD),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const Icon(Icons.calendar_month, color: AppColors.blue),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Google Calendar',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            connected
+                ? 'Los intervalos de tu calendario se muestran en modo solo lectura.'
+                : 'Conecta Google Calendar para calcular tu horario real.',
+            style: const TextStyle(fontSize: 13, color: AppColors.grey),
+          ),
+          const SizedBox(height: 18),
+          if (isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (connected) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onRefresh,
+                icon: const Icon(Icons.sync),
+                label: const Text('Actualizar calendario'),
+              ),
+            ),
+          ] else
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onConnect,
+                icon: const Icon(Icons.link),
+                label: const Text('Conectar Google Calendar'),
+              ),
+            ),
+        ],
       ),
     );
   }
