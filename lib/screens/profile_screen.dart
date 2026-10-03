@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/calendar_models.dart';
+import '../services/calendar_service.dart';
 import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'edit_profile_sheet.dart';
@@ -12,7 +14,10 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
+  final _calendarService = CalendarService();
   bool _isLoggingOut = false;
+  CalendarConnection _calendar = const CalendarConnection.disconnected();
+  List<CalendarEvent> _googleEvents = const [];
 
   // User data, hardcoded for now, later it comes from the database
   String name = 'Juan García';
@@ -95,14 +100,132 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } finally {
       authSession.setUnauthenticated();
-      if (!mounted) return;
-      setState(() => _isLoggingOut = false);
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+      }
     }
+  }
+
+  Future<void> _connectCalendar() async {
+    await _runCalendarAction(
+      action: () => _calendarService.connect(),
+      loadingStatus: CalendarConnectionStatus.connecting,
+    );
+  }
+
+  Future<void> _syncCalendar() async {
+    await _runCalendarAction(
+      action: () => _calendarService.sync(),
+      loadingStatus: CalendarConnectionStatus.syncing,
+    );
+  }
+
+  Future<void> _runCalendarAction({
+    required Future<CalendarSyncResult> Function() action,
+    required CalendarConnectionStatus loadingStatus,
+  }) async {
+    setState(
+      () => _calendar = _calendar.copyWith(
+        status: loadingStatus,
+        clearError: true,
+      ),
+    );
+    try {
+      final result = await action();
+      if (!mounted) return;
+      setState(() {
+        _calendar = result.connection;
+        _googleEvents = result.events;
+      });
+      Navigator.pop(context);
+    } on CalendarException catch (error) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      setState(
+        () => _calendar = _calendar.copyWith(
+          status: CalendarConnectionStatus.error,
+          errorMessage: error.message,
+        ),
+      );
+    }
+  }
+
+  Future<void> _disconnectCalendar() async {
+    setState(
+      () => _calendar = _calendar.copyWith(
+        status: CalendarConnectionStatus.syncing,
+        clearError: true,
+      ),
+    );
+    try {
+      await _calendarService.disconnect();
+      if (!mounted) return;
+      setState(() {
+        _calendar = const CalendarConnection.disconnected();
+        _googleEvents = const [];
+      });
+      Navigator.pop(context);
+    } on CalendarException catch (error) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      setState(
+        () => _calendar = _calendar.copyWith(
+          status: CalendarConnectionStatus.error,
+          errorMessage: error.message,
+        ),
+      );
+    }
+  }
+
+  void _openCalendarSync() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _CalendarSyncSheet(
+        connection: _calendar,
+        onConnect: _connectCalendar,
+        onSync: _syncCalendar,
+        onDisconnect: _disconnectCalendar,
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _itemsForDay(int dayIndex) {
+    final items = List<Map<String, dynamic>>.from(schedule[dayIndex]);
+    for (final event in _googleEvents) {
+      if (event.startsAt.weekday != dayIndex + 1) continue;
+      items.add({
+        'title': event.title,
+        'time': event.allDay
+            ? 'Todo el día'
+            : '${_time(event.startsAt)} - ${_time(event.endsAt)}',
+        'room': event.location ?? '',
+        'free': false,
+        'source': event.source,
+      });
+    }
+    return items;
+  }
+
+  String _time(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 
   @override
   Widget build(BuildContext context) {
-    final dayItems = schedule[selectedDay];
+    final dayItems = _itemsForDay(selectedDay);
     final freeWindows = dayItems.where((c) => c['free'] == true).length;
 
     return Scaffold(
@@ -286,8 +409,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ],
                         ),
                       ),
+                      _calendarAction(),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  if (_calendar.errorMessage != null)
+                    _calendarError(_calendar.errorMessage!),
                   const SizedBox(height: 14),
                   // The day buttons
                   Row(
@@ -360,6 +487,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _calendarAction() {
+    final connected =
+        _calendar.status == CalendarConnectionStatus.connected ||
+        _calendar.status == CalendarConnectionStatus.syncing;
+    final loading =
+        _calendar.status == CalendarConnectionStatus.connecting ||
+        _calendar.status == CalendarConnectionStatus.syncing;
+    return OutlinedButton.icon(
+      onPressed: loading ? null : _openCalendarSync,
+      icon: Icon(
+        connected ? Icons.check_circle_outline : Icons.calendar_month_outlined,
+        size: 16,
+      ),
+      label: Text(
+        loading
+            ? 'Sincronizando...'
+            : connected
+            ? 'Google Calendar'
+            : 'Conectar calendario',
+        style: const TextStyle(fontSize: 11),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: connected ? AppColors.green : AppColors.blue,
+        side: BorderSide(
+          color: connected ? const Color(0xFFBDE8CE) : AppColors.blue,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
+    );
+  }
+
+  Widget _calendarError(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF1F1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget classCard(Map<String, dynamic> item) {
     final bool isFree = item['free'];
     final Color borderColor = isFree ? AppColors.green : AppColors.blue;
@@ -415,6 +595,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                           ),
+                        if (item['source'] == 'google')
+                          const Icon(
+                            Icons.calendar_month_outlined,
+                            size: 16,
+                            color: AppColors.blue,
+                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -453,5 +639,121 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+}
+
+class _CalendarSyncSheet extends StatelessWidget {
+  const _CalendarSyncSheet({
+    required this.connection,
+    required this.onConnect,
+    required this.onSync,
+    required this.onDisconnect,
+  });
+
+  final CalendarConnection connection;
+  final VoidCallback onConnect;
+  final VoidCallback onSync;
+  final VoidCallback onDisconnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final isConnected =
+        connection.status == CalendarConnectionStatus.connected ||
+        connection.status == CalendarConnectionStatus.syncing;
+    final isLoading =
+        connection.status == CalendarConnectionStatus.connecting ||
+        connection.status == CalendarConnectionStatus.syncing;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        12,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD5D9DD),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const Icon(Icons.calendar_month, color: AppColors.blue),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Google Calendar',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isConnected
+                ? 'Tus eventos se muestran en el horario y se mantienen en modo solo lectura.'
+                : 'Conecta tu calendario para ver tus eventos junto a tu horario.',
+            style: const TextStyle(fontSize: 13, color: AppColors.grey),
+          ),
+          if (connection.email != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              connection.email!,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ],
+          if (connection.lastSyncedAt != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Última sincronización: ${_formatDate(connection.lastSyncedAt!)}',
+              style: const TextStyle(fontSize: 12, color: AppColors.grey),
+            ),
+          ],
+          const SizedBox(height: 18),
+          if (isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (isConnected) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onSync,
+                icon: const Icon(Icons.sync),
+                label: const Text('Sincronizar ahora'),
+              ),
+            ),
+            TextButton(
+              onPressed: onDisconnect,
+              child: const Text('Desconectar Google Calendar'),
+            ),
+          ] else
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: onConnect,
+                icon: const Icon(Icons.link),
+                label: const Text('Conectar Google Calendar'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatDate(DateTime date) {
+    final local = date.toLocal();
+    return '${local.day}/${local.month} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 }

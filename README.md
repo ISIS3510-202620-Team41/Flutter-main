@@ -63,6 +63,25 @@ claims before issuing the application's access and refresh tokens.
 
 This implementation does not require iOS, macOS, or web configuration.
 
+## Google Calendar sync contract
+
+The profile schedule consumes a Google-only, read-only calendar API through the
+authenticated session. The Flutter client expects these endpoints under
+`/api`:
+
+- `GET /calendar/google` returns `connected`, `email`, and `lastSyncedAt`.
+- `POST /calendar/google/connect` authorizes the provider and returns the
+  connection plus an `events` array.
+- `POST /calendar/google/sync` refreshes the imported events idempotently.
+- `DELETE /calendar/google` removes the provider connection without deleting
+  local activities.
+
+Each event contains `id`, `title`, `startsAt`, `endsAt`, optional `location`,
+`allDay`, and `source: "google"`. Provider OAuth access and refresh tokens must
+remain on the backend; they must never be returned to or stored by Flutter.
+The backend should return ISO-8601 timestamps with an explicit offset or IANA
+timezone and omit cancelled events.
+
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
