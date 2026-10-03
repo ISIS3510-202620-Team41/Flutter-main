@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,26 +11,11 @@ import 'analytics_service.dart';
 
 final authSession = AuthSession();
 
-final Future<void> _googleSignInInitialization = GoogleSignIn.instance
-    .initialize(
-      serverClientId:
-          const String.fromEnvironment(
-            'GOOGLE_SERVER_CLIENT_ID',
-            defaultValue: '',
-          ).isEmpty
-          ? null
-          : const String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID'),
-    );
-
 class AuthService {
   AuthService({http.Client? client, String? baseUrl})
     : _client = client ?? http.Client(),
       _baseUrl =
-          baseUrl ??
-          const String.fromEnvironment(
-            'API_BASE_URL',
-            defaultValue: 'http://10.0.2.2:8080/api',
-          );
+          baseUrl ?? (_env('API_BASE_URL') ?? 'http://10.0.2.2:8080/api');
 
   final http.Client _client;
   final String _baseUrl;
@@ -70,7 +56,11 @@ class AuthService {
   }
 
   Future<AuthResult> loginWithGoogle() async {
-    await _googleSignInInitialization;
+    await GoogleSignIn.instance.initialize(
+      serverClientId: (_env('GOOGLE_SERVER_CLIENT_ID') ?? '').isEmpty
+          ? null
+          : _env('GOOGLE_SERVER_CLIENT_ID'),
+    );
     final account = await GoogleSignIn.instance.authenticate();
     final idToken = account.authentication.idToken;
     if (idToken == null || idToken.isEmpty) {
@@ -265,6 +255,11 @@ class AuthService {
       );
     }
     return AuthResult(accessToken: accessToken, refreshToken: refreshToken);
+  }
+
+  static String? _env(String key) {
+    if (!dotenv.isInitialized) return null;
+    return dotenv.env[key];
   }
 
   Map<String, dynamic> _decodeBody(String value) {

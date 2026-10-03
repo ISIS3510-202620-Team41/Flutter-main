@@ -13,11 +13,11 @@ derived from the authenticated access-token JWT.
 
 ## Configuration
 
-Pass the engine settings when launching Flutter:
+Copy `.env.example` to `.env` and set the engine settings there:
 
 ```text
---dart-define=ANALYTICS_BASE_URL=http://10.0.2.2:8000
---dart-define=ANALYTICS_INGEST_KEY=local-ingest-key
+ANALYTICS_BASE_URL=http://10.0.2.2:8000
+ANALYTICS_INGEST_KEY=local-ingest-key
 ```
 
 Use the analytics host machine's LAN IP instead of `10.0.2.2` on a physical

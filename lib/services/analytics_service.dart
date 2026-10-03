@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,11 +18,9 @@ class AnalyticsService {
 
   static const _queueKey = 'analytics_event_queue';
   static const _crashKey = 'analytics_pending_crashes';
-  static const _baseUrl = String.fromEnvironment(
-    'ANALYTICS_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000',
-  );
-  static const _ingestKey = String.fromEnvironment('ANALYTICS_INGEST_KEY');
+  static String get _baseUrl =>
+      _env('ANALYTICS_BASE_URL') ?? 'http://10.0.2.2:8000';
+  static String get _ingestKey => _env('ANALYTICS_INGEST_KEY') ?? '';
 
   final http.Client _client;
   final Uuid _uuid;
@@ -70,10 +69,7 @@ class AnalyticsService {
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       ...fields,
     };
-    final appVersion = const String.fromEnvironment(
-      'APP_VERSION',
-      defaultValue: '1.0.0',
-    );
+    final appVersion = _env('APP_VERSION') ?? '1.0.0';
     event['appVersion'] = appVersion;
     await _saveEvent(event);
   }
@@ -190,6 +186,11 @@ class AnalyticsService {
     } on JsonUnsupportedObjectError {
       return null;
     }
+  }
+
+  static String? _env(String key) {
+    if (!dotenv.isInitialized) return null;
+    return dotenv.env[key];
   }
 
   static void installErrorHandlers() {
