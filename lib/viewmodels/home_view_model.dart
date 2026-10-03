@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/activity.dart';
 import '../models/profile_models.dart';
 import '../services/profile_service.dart';
 import '../services/schedule_service.dart';
@@ -50,6 +51,11 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> load() async {
     isLoading = true;
     errorMessage = null;
+    recommendations = const [];
+    recommendationId = null;
+    recommendationFreeMinutes = null;
+    recommendationsError = null;
+    actionMessage = null;
     notifyListeners();
     try {
       profile = await _profileService.getCurrentUser();
@@ -61,7 +67,6 @@ class HomeViewModel extends ChangeNotifier {
       final upcoming = gaps.free.where((gap) => gap.end.isAfter(now)).toList()
         ..sort((a, b) => a.start.compareTo(b.start));
       nextFreeInterval = upcoming.isEmpty ? null : upcoming.first;
-      await _loadRecommendations();
     } on ProfileException catch (error) {
       errorMessage = error.message;
     } on ScheduleException catch (error) {
@@ -69,10 +74,12 @@ class HomeViewModel extends ChangeNotifier {
     } catch (_) {
       errorMessage = 'No pudimos cargar tu información. Intenta de nuevo.';
     } finally {
+      await _loadRecommendations();
       isLoading = false;
       notifyListeners();
     }
   }
+
   Future<void> _loadRecommendations() async {
     recommendationsError = null;
     try {

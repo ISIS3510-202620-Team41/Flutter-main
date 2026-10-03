@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/schedule_service.dart';
 import '../theme/app_theme.dart';
+import '../viewmodels/profile_view_model.dart';
 import 'edit_profile_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -17,7 +18,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
-  final _profileService = ProfileService();
+  late final ProfileViewModel _profileViewModel;
   final _picker = ImagePicker();
   final _scheduleService = ScheduleService();
   bool _isLoggingOut = false;
@@ -35,7 +36,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _profileViewModel = ProfileViewModel();
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _profileViewModel.dispose();
+    super.dispose();
   }
 
   List<DateTime> _currentWeekdays() {
@@ -64,11 +72,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
       onTakePhoto: _takeProfilePhoto,
       onSave: (newName, newDescription) async {
         try {
-          final profile = await _profileService.updateProfile(
+          final profile = await _profileViewModel.updateProfile(
             name: newName.trim(),
             bio: newDescription.trim(),
           );
-          if (mounted) setState(() => _profile = profile);
+          if (mounted && profile != null) setState(() => _profile = profile);
+          if (profile == null && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  _profileViewModel.errorMessage ??
+                      'No pudimos actualizar tu perfil.',
+                ),
+              ),
+            );
+          }
         } on ProfileException catch (error) {
           if (mounted) {
             ScaffoldMessenger.of(
@@ -89,15 +107,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         preferredCameraDevice: CameraDevice.front,
       );
       if (photo == null) return null; // el usuario canceló
-      final profile = await _profileService.uploadAvatar(photo.path);
-      if (mounted) setState(() => _profile = profile);
-      return profile.avatarUrl;
-    } on ProfileException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+      final profile = await _profileViewModel.uploadAvatar(photo.path);
+      if (mounted && profile != null) setState(() => _profile = profile);
+      if (profile == null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _profileViewModel.errorMessage ??
+                  'No pudimos subir la foto de perfil.',
+            ),
+          ),
+        );
       }
+      return profile?.avatarUrl;
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,7 +136,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _errorMessage = null;
     });
     try {
-      final profile = await _profileService.getCurrentUser();
+      final profile = await _profileViewModel.load();
+      if (profile == null) {
+        throw ProfileException(
+          _profileViewModel.errorMessage ?? 'No pudimos cargar tu perfil.',
+        );
+      }
       await _loadSchedule();
       if (!mounted) return;
       setState(() {
@@ -266,14 +293,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           CircleAvatar(
                             radius: 34,
                             backgroundColor: AppColors.blue,
-                            child: Text(
-                              initials,
-                              style: const TextStyle(
-                                fontSize: 22,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                            backgroundImage: _profile?.avatarUrl == null
+                                ? null
+                                : NetworkImage(_profile!.avatarUrl!),
+                            child: _profile?.avatarUrl == null
+                                ? Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  )
+                                : null,
                           ),
                           Positioned(
                             right: 2,
