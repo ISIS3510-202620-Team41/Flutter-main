@@ -38,6 +38,15 @@ class ProfileService {
     return UserProfile.fromJson(_decode(response));
   }
 
+  Future<UserProfile> uploadAvatar(String filePath) async {
+    final response = await _authService.authenticatedMultipart(
+      path: '/users/me/avatar',
+      field: 'file',
+      filePath: filePath,
+    );
+    return UserProfile.fromJson(_decode(response));
+  }
+
   Future<http.Response> _request(
     String method,
     String path, {
