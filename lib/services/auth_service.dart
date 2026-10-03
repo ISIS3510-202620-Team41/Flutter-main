@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+final authSession = AuthSession();
 
 final Future<void> _googleSignInInitialization = GoogleSignIn.instance
     .initialize(
@@ -190,12 +193,14 @@ class AuthService {
       refreshed = await refresh();
     } on AuthException {
       await clearSession();
+      authSession.setUnauthenticated();
       throw const SessionExpiredException();
     }
     accessToken = refreshed.accessToken;
     response = await send();
     if (response.statusCode == 401) {
       await clearSession();
+      authSession.setUnauthenticated();
       throw const SessionExpiredException();
     }
     return response;
@@ -291,4 +296,20 @@ class SessionExpiredException extends AuthException {
         message: 'Tu sesión expiró. Inicia sesión nuevamente.',
         statusCode: 401,
       );
+}
+
+class AuthSession extends ChangeNotifier {
+  bool? isAuthenticated;
+
+  void setAuthenticated() {
+    if (isAuthenticated == true) return;
+    isAuthenticated = true;
+    notifyListeners();
+  }
+
+  void setUnauthenticated() {
+    if (isAuthenticated == false) return;
+    isAuthenticated = false;
+    notifyListeners();
+  }
 }

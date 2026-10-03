@@ -43,6 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
       if (!mounted) return;
+      authSession.setAuthenticated();
       Navigator.pushReplacementNamed(context, '/');
     } on AuthException catch (error) {
       if (!mounted) return;
@@ -67,6 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await _authService.loginWithGoogle();
       if (!mounted) return;
+      authSession.setAuthenticated();
       Navigator.pushReplacementNamed(context, '/');
     } on GoogleSignInException catch (error) {
       if (!mounted || error.code == GoogleSignInExceptionCode.canceled) return;

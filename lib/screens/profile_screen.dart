@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import 'edit_profile_sheet.dart';
 
@@ -10,6 +11,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final _authService = AuthService();
+  bool _isLoggingOut = false;
+
   // User data, hardcoded for now, later it comes from the database
   String name = 'Juan García';
   String description =
@@ -20,17 +24,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   final List<List<Map<String, dynamic>>> schedule = [
     [
-      {'title': 'Cálculo', 'time': '07:00 - 09:00', 'room': 'Sal. 201', 'free': false},
+      {
+        'title': 'Cálculo',
+        'time': '07:00 - 09:00',
+        'room': 'Sal. 201',
+        'free': false,
+      },
       {'title': 'Libre', 'time': '09:00 - 12:00', 'room': '', 'free': true},
     ],
     [
-      {'title': 'Diseño', 'time': '10:00 - 12:00', 'room': 'Sal. 310', 'free': false},
+      {
+        'title': 'Diseño',
+        'time': '10:00 - 12:00',
+        'room': 'Sal. 310',
+        'free': false,
+      },
     ],
     [
-      {'title': 'Física', 'time': '09:00 - 11:00', 'room': 'Sal. 104', 'free': false},
+      {
+        'title': 'Física',
+        'time': '09:00 - 11:00',
+        'room': 'Sal. 104',
+        'free': false,
+      },
     ],
     [
-      {'title': 'Estadística', 'time': '08:00 - 10:00', 'room': 'Sal. 105', 'free': false},
+      {
+        'title': 'Estadística',
+        'time': '08:00 - 10:00',
+        'room': 'Sal. 105',
+        'free': false,
+      },
       {'title': 'Libre', 'time': '10:00 - 13:00', 'room': '', 'free': true},
     ],
     [
@@ -57,6 +81,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       },
     );
+  }
+
+  Future<void> _logout() async {
+    setState(() => _isLoggingOut = true);
+    try {
+      await _authService.logout();
+    } on AuthException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      authSession.setUnauthenticated();
+      if (!mounted) return;
+      setState(() => _isLoggingOut = false);
+    }
   }
 
   @override
@@ -109,7 +150,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               decoration: BoxDecoration(
                                 color: AppColors.green,
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
@@ -130,19 +174,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             const SizedBox(height: 4),
                             Text(
                               description,
-                              style: const TextStyle(fontSize: 12, color: Color(0xFF4A5A66)),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF4A5A66),
+                              ),
                             ),
                             const SizedBox(height: 10),
                             OutlinedButton.icon(
                               onPressed: openEdit,
                               icon: const Icon(Icons.edit_outlined, size: 14),
-                              label: const Text('Editar perfil', style: TextStyle(fontSize: 12)),
+                              label: const Text(
+                                'Editar perfil',
+                                style: TextStyle(fontSize: 12),
+                              ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF3D4D59),
                                 backgroundColor: const Color(0x66FFFFFF),
                                 side: const BorderSide(color: Colors.white),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: _isLoggingOut ? null : _logout,
+                                  icon: const Icon(Icons.logout, size: 17),
+                                  label: Text(
+                                    _isLoggingOut
+                                        ? 'Cerrando sesión...'
+                                        : 'Cerrar sesión',
+                                  ),
                                 ),
                               ),
                             ),
@@ -188,10 +253,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       const Text(
                         'Mi horario',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.greenLight,
                           borderRadius: BorderRadius.circular(20),
@@ -199,11 +270,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.circle, size: 8, color: AppColors.green),
+                            const Icon(
+                              Icons.circle,
+                              size: 8,
+                              color: AppColors.green,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               '$freeWindows ventana libre',
-                              style: const TextStyle(fontSize: 12, color: AppColors.green),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.green,
+                              ),
                             ),
                           ],
                         ),
@@ -222,10 +300,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             margin: const EdgeInsets.symmetric(horizontal: 3),
                             padding: const EdgeInsets.symmetric(vertical: 11),
                             decoration: BoxDecoration(
-                              color: isSelected ? AppColors.rosewood : Colors.white,
+                              color: isSelected
+                                  ? AppColors.rosewood
+                                  : Colors.white,
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: const [
-                                BoxShadow(color: Color(0x14000000), blurRadius: 6),
+                                BoxShadow(
+                                  color: Color(0x14000000),
+                                  blurRadius: 6,
+                                ),
                               ],
                             ),
                             child: Center(
@@ -233,8 +316,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 days[i],
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: isSelected ? Colors.white : const Color(0xFF444444),
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF444444),
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
                                 ),
                               ),
                             ),
@@ -253,18 +340,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
   Widget statItem(IconData icon, String number, String label) {
     return Expanded(
       child: Column(
         children: [
           Icon(icon, size: 14, color: const Color(0xFFE0A93B)),
           const SizedBox(height: 4),
-          Text(number, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500)),
-          Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF4A5A66))),
+          Text(
+            number,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF4A5A66)),
+          ),
         ],
       ),
     );
   }
+
   Widget classCard(Map<String, dynamic> item) {
     final bool isFree = item['free'];
     final Color borderColor = isFree ? AppColors.green : AppColors.blue;
@@ -303,7 +398,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         if (isFree)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.green,
                               borderRadius: BorderRadius.circular(8),
@@ -322,14 +420,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.access_time, size: 14, color: AppColors.grey),
+                        const Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: AppColors.grey,
+                        ),
                         const SizedBox(width: 4),
-                        Text(item['time'], style: const TextStyle(fontSize: 13)),
+                        Text(
+                          item['time'],
+                          style: const TextStyle(fontSize: 13),
+                        ),
                         if (item['room'] != '') ...[
                           const SizedBox(width: 14),
-                          const Icon(Icons.meeting_room_outlined, size: 14, color: AppColors.grey),
+                          const Icon(
+                            Icons.meeting_room_outlined,
+                            size: 14,
+                            color: AppColors.grey,
+                          ),
                           const SizedBox(width: 4),
-                          Text(item['room'], style: const TextStyle(fontSize: 13)),
+                          Text(
+                            item['room'],
+                            style: const TextStyle(fontSize: 13),
+                          ),
                         ],
                       ],
                     ),

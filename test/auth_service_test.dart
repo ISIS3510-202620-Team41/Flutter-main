@@ -154,7 +154,9 @@ void main() {
         }
         expect(
           request.headers['authorization'],
-          anyOf('Bearer expired-access-token', 'Bearer renewed-access-token'),
+          requestCount == 1
+              ? 'Bearer expired-access-token'
+              : 'Bearer renewed-access-token',
         );
         return http.Response('{}', requestCount == 1 ? 401 : 200);
       });
