@@ -199,6 +199,44 @@ class AuthService {
     return response;
   }
 
+  Future<http.Response> authenticatedMultipart({
+    required String path,
+    required String field,
+    required String filePath,
+  }) async {
+    final preferences = await SharedPreferences.getInstance();
+    final accessToken = preferences.getString('access_token');
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const SessionExpiredException();
+    }
+
+    Future<http.Response> send(String token) async {
+      final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl$path'))
+        ..headers['Authorization'] = 'Bearer $token'
+        ..files.add(await http.MultipartFile.fromPath(field, filePath));
+      return http.Response.fromStream(await _client.send(request));
+    }
+
+    var response = await send(accessToken);
+    if (response.statusCode != 401) return response;
+
+    late final AuthResult refreshed;
+    try {
+      refreshed = await refresh();
+    } on AuthException {
+      await clearSession();
+      authSession.setUnauthenticated();
+      throw const SessionExpiredException();
+    }
+    response = await send(refreshed.accessToken);
+    if (response.statusCode == 401) {
+      await clearSession();
+      authSession.setUnauthenticated();
+      throw const SessionExpiredException();
+    }
+    return response;
+  }
+
   Future<http.Response> _send({
     required String method,
     required String path,

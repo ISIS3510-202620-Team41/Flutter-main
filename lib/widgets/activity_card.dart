@@ -68,7 +68,8 @@ class ActivityCard extends StatelessWidget {
                   children: [
                     InfoChip(icon: Icons.location_on_outlined, text: activity.distance),
                     InfoChip(icon: Icons.schedule_outlined, text: activity.duration),
-                    InfoChip(icon: Icons.attach_money, text: activity.price),
+                    if (activity.price.isNotEmpty)
+                     InfoChip(icon: Icons.attach_money, text: activity.price),
                     InfoChip(icon: Icons.group_outlined, text: activity.people),
                   ],
                 ),

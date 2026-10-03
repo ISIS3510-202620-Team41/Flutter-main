@@ -6,6 +6,8 @@ void showEditProfile({
   required String currentName,
   required String currentDescription,
   required Future<void> Function(String name, String description) onSave,
+  String? currentAvatarUrl,
+  required Future<String?> Function() onTakePhoto,
 }) {
   showModalBottomSheet(
     context: context,
@@ -18,6 +20,8 @@ void showEditProfile({
       currentName: currentName,
       currentDescription: currentDescription,
       onSave: onSave,
+      currentAvatarUrl: currentAvatarUrl,
+      onTakePhoto: onTakePhoto,
     ),
   );
 }
@@ -26,12 +30,16 @@ class EditProfileContent extends StatefulWidget {
   final String currentName;
   final String currentDescription;
   final Future<void> Function(String, String) onSave;
+  final String? currentAvatarUrl;
+  final Future<String?> Function() onTakePhoto;
 
   const EditProfileContent({
     super.key,
     required this.currentName,
     required this.currentDescription,
     required this.onSave,
+    this.currentAvatarUrl,
+    required this.onTakePhoto,
   });
 
   @override
@@ -42,11 +50,14 @@ class _EditProfileContentState extends State<EditProfileContent> {
   late TextEditingController nameController;
   late TextEditingController descriptionController;
   final urlController = TextEditingController();
+  String? avatarUrl;
+  bool uploadingPhoto = false;
 
   @override
   void initState() {
     super.initState();
     // Start with what the profile already had
+    avatarUrl = widget.currentAvatarUrl;
     nameController = TextEditingController(text: widget.currentName);
     descriptionController = TextEditingController(
       text: widget.currentDescription,
@@ -59,6 +70,17 @@ class _EditProfileContentState extends State<EditProfileContent> {
     descriptionController.dispose();
     urlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _takePhoto() async {
+    if (uploadingPhoto) return;
+    setState(() => uploadingPhoto = true);
+    final newUrl = await widget.onTakePhoto();
+    if (!mounted) return;
+    setState(() {
+      uploadingPhoto = false;
+      if (newUrl != null) avatarUrl = newUrl;
+    });
   }
 
   InputDecoration fieldStyle({String? hint}) {
@@ -133,25 +155,44 @@ class _EditProfileContentState extends State<EditProfileContent> {
                   CircleAvatar(
                     radius: 38,
                     backgroundColor: AppColors.blue,
-                    child: Text(
+                    backgroundImage:
+                    avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+                    child: avatarUrl != null
+                        ? null
+                        : Text(
                       initials,
-                      style: const TextStyle(fontSize: 26, color: Colors.white),
+                      style: const TextStyle(
+                        fontSize: 26,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   Positioned(
                     right: 0,
                     bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.rosewood,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      child: const Icon(
-                        Icons.upload,
-                        size: 12,
-                        color: Colors.white,
+                    child: GestureDetector(
+                      onTap: _takePhoto,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.rosewood,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        child: uploadingPhoto
+                            ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                            : const Icon(
+                          Icons.camera_alt,
+                          size: 12,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),

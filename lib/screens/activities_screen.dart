@@ -17,7 +17,7 @@ class ActivitiesScreen extends StatefulWidget {
 }
 
 class _ActivitiesScreenState extends State<ActivitiesScreen> {
-  final _viewModel = ActivitiesViewModel();
+  late final _viewModel = ActivitiesViewModel()..load();
 
   @override
   void dispose() {
@@ -44,34 +44,31 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 10),
-              const MapPreview(height: 126, markerLabel: 'Bistro'),
+              MapPreview(height: 126, markerLabel: _viewModel.visibleActivities.isEmpty
+                  ? 'Tú'
+                  : (_viewModel.visibleActivities.first.locationName ??
+                  _viewModel.visibleActivities.first.name),
+              ),
               const SizedBox(height: 9),
-              Row(
-                children: [
-                  Expanded(
-                    child: _CategoryPill(
-                      label: 'Comida',
-                      selected: _viewModel.selectedCategory == 'Comida',
-                      onTap: () => _viewModel.selectCategory('Comida'),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child:Row(
+                  children: ActivitiesViewModel.categories
+                      .map(
+                        (label) => Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: SizedBox(
+                        width: 100,
+                        child: _CategoryPill(
+                          label: label,
+                          selected: _viewModel.selectedCategory == label,
+                          onTap: () => _viewModel.selectCategory(label),
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _CategoryPill(
-                      label: 'Manualidades',
-                      selected: _viewModel.selectedCategory == 'Manualidades',
-                      onTap: () => _viewModel.selectCategory('Manualidades'),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: _CategoryPill(
-                      label: 'Descanso',
-                      selected: _viewModel.selectedCategory == 'Descanso',
-                      onTap: () => _viewModel.selectCategory('Descanso'),
-                    ),
-                  ),
-                ],
+                  )
+                      .toList(),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -98,17 +95,46 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              ..._viewModel.visibleActivities.map(
-                (activity) => Padding(
-                  padding: const EdgeInsets.only(bottom: 9),
-                  child: _ActivityRow(
-                    activity: activity,
-                    onTap: activity.name == 'Dibujo y Más'
-                        ? widget.onOpenDetail
-                        : null,
+              if (_viewModel.isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 30),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_viewModel.errorMessage != null)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _viewModel.errorMessage!,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _viewModel.load,
+                      child: const Text('Reintentar'),
+                    ),
+                  ],
+                )
+              else if (_viewModel.visibleActivities.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 20),
+                    child: Center(
+                      child: Text(
+                        'No hay actividades cerca con esos filtros.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  )
+                else
+                  ..._viewModel.visibleActivities.map(
+                        (activity) => Padding(
+                      padding: const EdgeInsets.only(bottom: 9),
+                      child: _ActivityRow(
+                        activity: activity,
+                        onTap: widget.onOpenDetail,
+                      ),
+                    ),
                   ),
-                ),
-              ),
             ],
           ),
         ),
@@ -116,6 +142,7 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
     );
   }
 }
+
 
 class _CategoryPill extends StatelessWidget {
   const _CategoryPill({required this.label, this.selected = false, this.onTap});
@@ -244,7 +271,8 @@ class _ActivityRow extends StatelessWidget {
                         icon: Icons.group_outlined,
                         text: activity.people,
                       ),
-                      InfoChip(icon: Icons.attach_money, text: activity.price),
+                      if (activity.price.isNotEmpty)
+                        InfoChip(icon: Icons.attach_money, text: activity.price),
                       InfoChip(
                         icon: Icons.schedule_outlined,
                         text: activity.duration,

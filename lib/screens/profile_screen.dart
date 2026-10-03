@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/profile_models.dart';
 import '../services/auth_service.dart';
@@ -17,6 +18,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
   final _profileService = ProfileService();
+  final _picker = ImagePicker();
   final _scheduleService = ScheduleService();
   bool _isLoggingOut = false;
   bool _isLoading = true;
@@ -58,6 +60,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       currentName: _profile?.name ?? '',
       currentDescription: _profile?.bio ?? '',
+      currentAvatarUrl: _profile?.avatarUrl,
+      onTakePhoto: _takeProfilePhoto,
       onSave: (newName, newDescription) async {
         try {
           final profile = await _profileService.updateProfile(
@@ -74,6 +78,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       },
     );
+  }
+
+  Future<String?> _takeProfilePhoto() async {
+    try {
+      final photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1024, // el backend la reduce a 512 igual y acepta hasta 5 MB
+        imageQuality: 85,
+        preferredCameraDevice: CameraDevice.front,
+      );
+      if (photo == null) return null; // el usuario canceló
+      final profile = await _profileService.uploadAvatar(photo.path);
+      if (mounted) setState(() => _profile = profile);
+      return profile.avatarUrl;
+    } on ProfileException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No pudimos abrir la cámara.')),
+        );
+      }
+    }
+    return null;
   }
 
   Future<void> _loadProfile() async {
@@ -319,7 +351,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 18),
-                  // Card with the 3 stats
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
@@ -398,7 +429,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 10),
                   if (_errorMessage != null) _calendarError(_errorMessage!),
                   const SizedBox(height: 14),
-                  // The day buttons
                   Row(
                     children: List.generate(days.length, (i) {
                       final isSelected = i == selectedDay;

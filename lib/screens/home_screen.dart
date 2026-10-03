@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../data/mock_data.dart';
+import '../models/activity.dart';
 import '../models/profile_models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/header.dart';
@@ -25,6 +25,22 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  Future<void> _choose(Activity activity) async {
+    final joined = await _viewModel.choose(activity);
+    if (!mounted) return;
+    if (joined) {
+      Navigator.pushNamed(context, '/activity-detail');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _viewModel.actionMessage ?? 'No pudimos unirte a la actividad.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -38,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Header(onAdd: widget.onOpenFlow),
               const SizedBox(height: 18),
               Text(
-                'Hola, ${_viewModel.greetingName} 👋',
+                'Hola, ${_viewModel.greetingName} ',
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 3),
@@ -59,12 +75,26 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 20),
               const SectionTitle('Actividades recomendadas'),
               const SizedBox(height: 10),
-              ActivityCard(
-                activity: bistro,
-                onChoose: () => Navigator.pushNamed(context, '/activity-detail'),
-              ),
-              const SizedBox(height: 12),
-              ActivityCard(activity: pokeAndDraw),
+              if (_viewModel.recommendationsError != null)
+                Text(
+                  _viewModel.recommendationsError!,
+                  style: const TextStyle(fontSize: 12),
+                )
+              else if (_viewModel.recommendations.isEmpty)
+                const Text(
+                  'No hay actividades recomendadas cerca por ahora.',
+                  style: TextStyle(fontSize: 12),
+                )
+              else
+                ..._viewModel.recommendations.map(
+                      (activity) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ActivityCard(
+                      activity: activity,
+                      onChoose: () => _choose(activity),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
