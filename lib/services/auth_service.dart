@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -99,9 +100,15 @@ class AuthService {
     if (refreshToken == null || refreshToken.isEmpty) return false;
 
     try {
-      await refresh();
+      await refresh().timeout(const Duration(seconds: 5));
       return true;
     } on AuthException {
+      await clearSession();
+      return false;
+    } on http.ClientException {
+      await clearSession();
+      return false;
+    } on TimeoutException {
       await clearSession();
       return false;
     }

@@ -108,7 +108,7 @@ class _ActivityImage extends StatelessWidget {
       child: Image.network(
         url,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(
+        errorBuilder: (_, _, _) => Container(
           color: AppColors.blue.withValues(alpha: 0.30),
           child: const Center(child: Icon(Icons.broken_image_outlined)),
         ),

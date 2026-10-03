@@ -5,8 +5,8 @@ import 'screens/activity_detail_screen.dart';
 import 'screens/activity_created_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
+import 'screens/step1_invite_screen.dart';
 import 'services/auth_service.dart';
-// import 'screens/create_activity_placeholder_screen.dart';
 import 'theme/app_theme.dart';
 
 class AppRoutes {
@@ -49,7 +49,7 @@ class _LlamallaAppState extends State<LlamallaApp> {
           routes: {
             AppRoutes.login: (_) => const LoginScreen(),
             AppRoutes.register: (_) => const RegisterScreen(),
-            AppRoutes.createActivity: (_) => const ActivityCreatedScreen(),
+            AppRoutes.createActivity: (_) => const Step1InviteScreen(),
             AppRoutes.activityCreated: (_) => const ActivityCreatedScreen(),
             AppRoutes.activityDetail: (_) => const ActivityDetailScreen(),
           },

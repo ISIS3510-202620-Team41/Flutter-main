@@ -58,32 +58,34 @@ void main() {
     );
   });
 
-  test('Google token exchange posts the ID token and stores app tokens',
-      () async {
-    SharedPreferences.setMockInitialValues({});
-    final client = MockClient((request) async {
-      expect(request.method, 'POST');
-      expect(request.url.toString(), 'http://test/api/auth/google');
-      expect(jsonDecode(request.body), {'idToken': 'google-id-token'});
-      return http.Response(
-        jsonEncode({
-          'accessToken': 'google-access-token',
-          'refreshToken': 'google-refresh-token',
-        }),
-        200,
-      );
-    });
+  test(
+    'Google token exchange posts the ID token and stores app tokens',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final client = MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.toString(), 'http://test/api/auth/google');
+        expect(jsonDecode(request.body), {'idToken': 'google-id-token'});
+        return http.Response(
+          jsonEncode({
+            'accessToken': 'google-access-token',
+            'refreshToken': 'google-refresh-token',
+          }),
+          200,
+        );
+      });
 
-    final result = await AuthService(
-      client: client,
-      baseUrl: 'http://test/api',
-    ).exchangeGoogleIdToken('google-id-token');
+      final result = await AuthService(
+        client: client,
+        baseUrl: 'http://test/api',
+      ).exchangeGoogleIdToken('google-id-token');
 
-    final preferences = await SharedPreferences.getInstance();
-    expect(result.accessToken, 'google-access-token');
-    expect(preferences.getString('access_token'), 'google-access-token');
-    expect(preferences.getString('refresh_token'), 'google-refresh-token');
-  });
+      final preferences = await SharedPreferences.getInstance();
+      expect(result.accessToken, 'google-access-token');
+      expect(preferences.getString('access_token'), 'google-access-token');
+      expect(preferences.getString('refresh_token'), 'google-refresh-token');
+    },
+  );
 
   test('refresh rotates and persists the returned token pair', () async {
     SharedPreferences.setMockInitialValues({
@@ -91,9 +93,7 @@ void main() {
     });
     final client = MockClient((request) async {
       expect(request.url.toString(), 'http://test/api/auth/refresh');
-      expect(jsonDecode(request.body), {
-        'refreshToken': 'old-refresh-token',
-      });
+      expect(jsonDecode(request.body), {'refreshToken': 'old-refresh-token'});
       return http.Response(
         jsonEncode({
           'accessToken': 'new-access-token',
@@ -110,38 +110,64 @@ void main() {
     expect(preferences.getString('refresh_token'), 'new-refresh-token');
   });
 
-  test('authenticated requests refresh once after an expired access token', () async {
-    SharedPreferences.setMockInitialValues({
-      'access_token': 'expired-access-token',
-      'refresh_token': 'refresh-token',
-    });
-    var requestCount = 0;
-    final client = MockClient((request) async {
-      requestCount++;
-      if (request.url.path.endsWith('/auth/refresh')) {
-        return http.Response(
-          jsonEncode({
-            'accessToken': 'renewed-access-token',
-            'refreshToken': 'renewed-refresh-token',
-          }),
-          200,
+  test(
+    'restoreSession clears stale tokens when backend is unavailable',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'access_token': 'access-token',
+        'refresh_token': 'refresh-token',
+      });
+      final client = MockClient(
+        (_) async => throw http.ClientException('Connection refused'),
+      );
+
+      final restored = await AuthService(
+        client: client,
+        baseUrl: 'http://test/api',
+      ).restoreSession();
+
+      final preferences = await SharedPreferences.getInstance();
+      expect(restored, isFalse);
+      expect(preferences.containsKey('access_token'), isFalse);
+      expect(preferences.containsKey('refresh_token'), isFalse);
+    },
+  );
+
+  test(
+    'authenticated requests refresh once after an expired access token',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'access_token': 'expired-access-token',
+        'refresh_token': 'refresh-token',
+      });
+      var requestCount = 0;
+      final client = MockClient((request) async {
+        requestCount++;
+        if (request.url.path.endsWith('/auth/refresh')) {
+          return http.Response(
+            jsonEncode({
+              'accessToken': 'renewed-access-token',
+              'refreshToken': 'renewed-refresh-token',
+            }),
+            200,
+          );
+        }
+        expect(
+          request.headers['authorization'],
+          anyOf('Bearer expired-access-token', 'Bearer renewed-access-token'),
         );
-      }
-      expect(request.headers['authorization'], anyOf(
-        'Bearer expired-access-token',
-        'Bearer renewed-access-token',
-      ));
-      return http.Response('{}', requestCount == 1 ? 401 : 200);
-    });
+        return http.Response('{}', requestCount == 1 ? 401 : 200);
+      });
 
-    final response = await AuthService(
-      client: client,
-      baseUrl: 'http://test/api',
-    ).authenticatedRequest(method: 'GET', path: '/users/me');
+      final response = await AuthService(
+        client: client,
+        baseUrl: 'http://test/api',
+      ).authenticatedRequest(method: 'GET', path: '/users/me');
 
-    expect(response.statusCode, 200);
-    expect(requestCount, 3);
-  });
+      expect(response.statusCode, 200);
+      expect(requestCount, 3);
+    },
+  );
 
   test('logout revokes the refresh token and clears local session', () async {
     SharedPreferences.setMockInitialValues({

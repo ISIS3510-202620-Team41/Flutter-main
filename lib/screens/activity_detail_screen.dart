@@ -39,7 +39,7 @@ class ActivityDetailScreen extends StatelessWidget {
                   height: 170,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (_, _, _) => Container(
                     height: 170,
                     color: AppColors.blue.withValues(alpha: 0.35),
                     child: const Icon(Icons.image_outlined, size: 42),

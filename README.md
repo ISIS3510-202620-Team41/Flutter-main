@@ -28,6 +28,20 @@ For a physical device, provide the development machine's local network address:
 flutter run --dart-define=API_BASE_URL=http://<your-pc-ip>:8080/api
 ```
 
+## Android build toolchain
+
+Use a supported JDK for the Android build, such as JDK 17 or JDK 23. Do not
+commit a machine-specific `org.gradle.java.home` path. If Flutter is pointing
+to an incompatible JDK, configure it locally with:
+
+```bash
+flutter config --jdk-dir="<path-to-supported-jdk>"
+flutter build apk --debug
+```
+
+The app can be analyzed and tested without the backend. Flows that register,
+log in, refresh, or revoke a real session require the backend to be running.
+
 ## Google sign-in
 
 The Android Google button authenticates with the native Google Sign-In SDK,

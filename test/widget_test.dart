@@ -23,8 +23,10 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Continuar con Google'));
+    await tester.ensureVisible(find.text('Ingresar con biometría'));
     await tester.tap(find.text('Ingresar con biometría'));
     await tester.tap(find.text('Iniciar sesión'));
+    await tester.ensureVisible(find.text('Crear una cuenta'));
     await tester.tap(find.text('Crear una cuenta'));
     await tester.pump();
 

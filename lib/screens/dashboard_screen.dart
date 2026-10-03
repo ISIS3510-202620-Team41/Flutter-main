@@ -4,7 +4,7 @@ import '../widgets/app_bottom_nav.dart';
 import 'activities_screen.dart';
 import 'friends_screen.dart';
 import 'home_screen.dart';
-import 'profile_placeholder_screen.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,7 +28,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       const FriendsScreen(),
       ActivitiesScreen(onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail')),
-      const ProfilePlaceholderScreen(),
+      const ProfileScreen(),
     ];
 
     return Scaffold(
