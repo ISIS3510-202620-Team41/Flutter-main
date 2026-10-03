@@ -1,16 +1,33 @@
 import 'package:flutter/material.dart';
-import '../data/mock_data.dart';
 import '../models/activity.dart';
 import '../theme/app_theme.dart';
 import '../widgets/header.dart';
+import '../viewmodels/friends_view_model.dart';
 
-class FriendsScreen extends StatelessWidget {
+class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
+
+  @override
+  State<FriendsScreen> createState() => _FriendsScreenState();
+}
+
+class _FriendsScreenState extends State<FriendsScreen> {
+  final _viewModel = FriendsViewModel();
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _viewModel.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: SingleChildScrollView(
+      child: AnimatedBuilder(
+        animation: _viewModel,
+        builder: (context, _) => SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -21,8 +38,10 @@ class FriendsScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: TextField(
+                    controller: _searchController,
+                    onChanged: _viewModel.setQuery,
                     decoration: InputDecoration(
                       prefixIcon: Icon(Icons.search, size: 18),
                       hintText: 'Buscar por nombre',
@@ -52,7 +71,7 @@ class FriendsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            ...friends.map((friend) => Padding(
+            ..._viewModel.visibleFriends.map((friend) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: _FriendTile(friend: friend),
                 )),
@@ -74,6 +93,7 @@ class FriendsScreen extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

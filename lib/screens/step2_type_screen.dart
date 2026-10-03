@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/step_header.dart';
 import 'step3_place_screen.dart';
+import '../viewmodels/friends_view_model.dart';
 
 class Step2TypeScreen extends StatefulWidget {
   final List<String> friends;
@@ -12,7 +13,8 @@ class Step2TypeScreen extends StatefulWidget {
 }
 
 class _Step2TypeScreenState extends State<Step2TypeScreen> {
-  final List<Map<String, String>> categories = [
+  final _viewModel = ActivityCreationViewModel();
+  final categories = const [
     {'name': 'Food', 'emoji': '🍽️'},
     {'name': 'Plays', 'emoji': '🎮'},
     {'name': 'Music', 'emoji': '🎵'},
@@ -21,21 +23,21 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
     {'name': 'Cultural', 'emoji': '🎭'},
   ];
 
-  final List<String> selected = ['Food'];
-
   void toggle(String name) {
-    setState(() {
-      if (selected.contains(name)) {
-        selected.remove(name);
-      } else {
-        selected.add(name);
-      }
-    });
+    _viewModel.toggleCategory(name);
+  }
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AnimatedBuilder(
+      animation: _viewModel,
+      builder: (context, _) => Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
@@ -55,7 +57,7 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                   crossAxisSpacing: 12,
                   childAspectRatio: 1.45,
                   children: categories.map((cat) {
-                    final isActive = selected.contains(cat['name']);
+                    final isActive = _viewModel.selectedCategories.contains(cat['name']);
                     return GestureDetector(
                       onTap: () => toggle(cat['name']!),
                       child: Container(
@@ -102,7 +104,7 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: selected.isEmpty
+                        onPressed: _viewModel.selectedCategories.isEmpty
                             ? null
                             : () {
                           Navigator.push(
@@ -110,7 +112,7 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                             MaterialPageRoute(
                               builder: (_) => Step3PlaceScreen(
                                 friends: widget.friends,
-                                categories: selected,
+                                categories: _viewModel.selectedCategories,
                               ),
                             ),
                           );
@@ -130,6 +132,7 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

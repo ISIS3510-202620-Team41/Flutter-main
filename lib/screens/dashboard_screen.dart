@@ -7,6 +7,7 @@ import 'activities_screen.dart';
 import 'friends_screen.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
+import '../viewmodels/dashboard_view_model.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,10 +17,10 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _index = 0;
+  final _viewModel = DashboardViewModel();
 
   void _onDestinationSelected(int index) {
-    setState(() => _index = index);
+    _viewModel.selectTab(index);
     const screens = ['Home', 'FriendAvailability', 'Activities', 'Profile'];
     unawaited(
       AnalyticsService.instance.track('screen_view', {
@@ -27,6 +28,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }),
     );
     AnalyticsService.instance.setCurrentScreen(screens[index]);
+  }
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
   }
 
   @override
@@ -42,11 +49,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const ProfileScreen(),
     ];
 
-    return Scaffold(
-      body: IndexedStack(index: _index, children: screens),
-      bottomNavigationBar: AppBottomNav(
-        index: _index,
-        onDestinationSelected: _onDestinationSelected,
+    return AnimatedBuilder(
+      animation: _viewModel,
+      builder: (context, _) => Scaffold(
+        body: IndexedStack(index: _viewModel.selectedIndex, children: screens),
+        bottomNavigationBar: AppBottomNav(
+          index: _viewModel.selectedIndex,
+          onDestinationSelected: _onDestinationSelected,
+        ),
       ),
     );
   }

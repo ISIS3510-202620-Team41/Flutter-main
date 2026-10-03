@@ -8,7 +8,7 @@ void main() {
     await tester.pumpWidget(const LlamallaApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Actividad ya'), findsOneWidget);
+    expect(find.text('Llamalla'), findsOneWidget);
     expect(find.text('Qué bueno verte de\nnuevo'), findsOneWidget);
     expect(find.text('Continuar con Google'), findsOneWidget);
     expect(find.text('Ingresar con biometría'), findsOneWidget);
@@ -30,7 +30,7 @@ void main() {
     await tester.tap(find.text('Crear una cuenta'));
     await tester.pump();
 
-    expect(find.text('Actividad ya'), findsOneWidget);
+    expect(find.text('Llamalla'), findsOneWidget);
   });
 
   testWidgets('login validates required credentials locally', (

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/step_header.dart';
 import 'step2_type_screen.dart';
+import '../viewmodels/friends_view_model.dart';
 
 class Step1InviteScreen extends StatefulWidget {
   const Step1InviteScreen({super.key});
@@ -12,7 +13,7 @@ class Step1InviteScreen extends StatefulWidget {
 
 class _Step1InviteScreenState extends State<Step1InviteScreen> {
   final List<String> friends = ['Alex', 'Sam', 'Jordan', 'Daniel Duplat', 'María Díaz'];
-  final List<String> selected = ['Alex'];
+  final _viewModel = ActivityCreationViewModel();
 
   String initialsOf(String name) {
     final parts = name.split(' ');
@@ -21,18 +22,20 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
   }
 
   void toggle(String name) {
-    setState(() {
-      if (selected.contains(name)) {
-        selected.remove(name);
-      } else {
-        selected.add(name);
-      }
-    });
+    _viewModel.toggleFriend(name);
+  }
+
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return AnimatedBuilder(
+      animation: _viewModel,
+      builder: (context, _) => Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
@@ -42,12 +45,12 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
             children: [
               const StepHeader(title: 'Who are you inviting?', step: 1),
               const SizedBox(height: 14),
-              Text('Selected (${selected.length})',
+              Text('Selected (${_viewModel.selectedFriends.length})',
                   style: const TextStyle(fontSize: 12, color: AppColors.grey)),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 12,
-                children: selected.map((name) {
+                children: _viewModel.selectedFriends.map((name) {
                   return Column(
                     children: [
                       Stack(
@@ -86,7 +89,7 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
               Expanded(
                 child: ListView(
                   children: friends.map((name) {
-                    final isActive = selected.contains(name);
+                    final isActive = _viewModel.selectedFriends.contains(name);
                     return GestureDetector(
                       onTap: () => toggle(name),
                       child: Container(
@@ -160,13 +163,13 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: selected.isEmpty
+                        onPressed: _viewModel.selectedFriends.isEmpty
                             ? null
                             : () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => Step2TypeScreen(friends: selected),
+                              builder: (_) => Step2TypeScreen(friends: _viewModel.selectedFriends),
                             ),
                           );
                         },
@@ -176,7 +179,7 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text('Next (${selected.length})'),
+                        child: Text('Next (${_viewModel.selectedFriends.length})'),
                       ),
                     ),
                   ],
@@ -185,6 +188,7 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

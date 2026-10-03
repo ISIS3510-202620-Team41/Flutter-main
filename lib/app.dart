@@ -108,7 +108,7 @@ class _LlamallaAppState extends State<LlamallaApp>
           animation: authSession,
           builder: (context, _) => MaterialApp(
             navigatorKey: _navigatorKey,
-            title: 'ActiYa',
+            title: 'Llamalla',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
             navigatorObservers: [AnalyticsNavigatorObserver()],
