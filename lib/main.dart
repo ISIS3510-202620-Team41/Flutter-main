@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app.dart';
+import 'services/analytics_service.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env', isOptional: true);
+  AnalyticsService.installErrorHandlers();
+  await AnalyticsService.instance.initialize();
   runApp(const LlamallaApp());
 }
