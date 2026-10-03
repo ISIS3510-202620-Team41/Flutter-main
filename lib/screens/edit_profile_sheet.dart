@@ -5,7 +5,7 @@ void showEditProfile({
   required BuildContext context,
   required String currentName,
   required String currentDescription,
-  required Function(String name, String description) onSave,
+  required Future<void> Function(String name, String description) onSave,
 }) {
   showModalBottomSheet(
     context: context,
@@ -25,7 +25,7 @@ void showEditProfile({
 class EditProfileContent extends StatefulWidget {
   final String currentName;
   final String currentDescription;
-  final Function(String, String) onSave;
+  final Future<void> Function(String, String) onSave;
 
   const EditProfileContent({
     super.key,
@@ -48,7 +48,9 @@ class _EditProfileContentState extends State<EditProfileContent> {
     super.initState();
     // Start with what the profile already had
     nameController = TextEditingController(text: widget.currentName);
-    descriptionController = TextEditingController(text: widget.currentDescription);
+    descriptionController = TextEditingController(
+      text: widget.currentDescription,
+    );
   }
 
   @override
@@ -82,15 +84,19 @@ class _EditProfileContentState extends State<EditProfileContent> {
     final initials = nameController.text.trim().isEmpty
         ? '?'
         : nameController.text
-        .trim()
-        .split(' ')
-        .take(2)
-        .map((p) => p[0].toUpperCase())
-        .join();
+              .trim()
+              .split(' ')
+              .take(2)
+              .map((p) => p[0].toUpperCase())
+              .join();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          20, 10, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+        20,
+        10,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -110,8 +116,10 @@ class _EditProfileContentState extends State<EditProfileContent> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Edit profile',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Edit profile',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
                   child: const Icon(Icons.close, size: 20),
@@ -125,8 +133,10 @@ class _EditProfileContentState extends State<EditProfileContent> {
                   CircleAvatar(
                     radius: 38,
                     backgroundColor: AppColors.blue,
-                    child: Text(initials,
-                        style: const TextStyle(fontSize: 26, color: Colors.white)),
+                    child: Text(
+                      initials,
+                      style: const TextStyle(fontSize: 26, color: Colors.white),
+                    ),
                   ),
                   Positioned(
                     right: 0,
@@ -138,7 +148,11 @@ class _EditProfileContentState extends State<EditProfileContent> {
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2),
                       ),
-                      child: const Icon(Icons.upload, size: 12, color: Colors.white),
+                      child: const Icon(
+                        Icons.upload,
+                        size: 12,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -162,16 +176,27 @@ class _EditProfileContentState extends State<EditProfileContent> {
                     backgroundColor: AppColors.blue,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   child: const Text('Usar'),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            const Text('NOMBRE',
-                style: TextStyle(fontSize: 11, color: AppColors.grey, letterSpacing: 0.5)),
+            const Text(
+              'NOMBRE',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.grey,
+                letterSpacing: 0.5,
+              ),
+            ),
             const SizedBox(height: 6),
             TextField(
               controller: nameController,
@@ -179,8 +204,14 @@ class _EditProfileContentState extends State<EditProfileContent> {
               decoration: fieldStyle(),
             ),
             const SizedBox(height: 14),
-            const Text('DESCRIPCIÓN',
-                style: TextStyle(fontSize: 11, color: AppColors.grey, letterSpacing: 0.5)),
+            const Text(
+              'DESCRIPCIÓN',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.grey,
+                letterSpacing: 0.5,
+              ),
+            ),
             const SizedBox(height: 6),
             TextField(
               controller: descriptionController,
@@ -191,20 +222,24 @@ class _EditProfileContentState extends State<EditProfileContent> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  widget.onSave(
+                onPressed: () async {
+                  await widget.onSave(
                     nameController.text,
                     descriptionController.text,
                   );
-                  Navigator.pop(context);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.rosewood,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                child: const Text('Guardar cambios', style: TextStyle(fontSize: 15)),
+                child: const Text(
+                  'Guardar cambios',
+                  style: TextStyle(fontSize: 15),
+                ),
               ),
             ),
           ],

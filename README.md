@@ -65,22 +65,23 @@ This implementation does not require iOS, macOS, or web configuration.
 
 ## Google Calendar sync contract
 
-The profile schedule consumes a Google-only, read-only calendar API through the
-authenticated session. The Flutter client expects these endpoints under
-`/api`:
+The profile schedule uses the authenticated user's Google Calendar in
+read-only mode. Flutter obtains a Google server authorization code and sends
+it to the backend; provider access and refresh tokens remain on the backend.
+The client expects these endpoints under `/api`:
 
-- `GET /calendar/google` returns `connected`, `email`, and `lastSyncedAt`.
-- `POST /calendar/google/connect` authorizes the provider and returns the
-  connection plus an `events` array.
-- `POST /calendar/google/sync` refreshes the imported events idempotently.
-- `DELETE /calendar/google` removes the provider connection without deleting
-  local activities.
+- `POST /schedules/sync/google` with `{ "authCode": "..." }` imports or
+  refreshes the user's Google busy time blocks. The optional `tz` query
+  parameter controls timezone conversion.
+- `POST /schedules/sync/google/refresh` refreshes an existing Google
+  connection without requiring another authorization code.
+- `GET /schedules/me/gaps?date=YYYY-MM-DD&tz=America/Bogota` returns the
+  calculated free intervals for the requested date.
 
-Each event contains `id`, `title`, `startsAt`, `endsAt`, optional `location`,
-`allDay`, and `source: "google"`. Provider OAuth access and refresh tokens must
-remain on the backend; they must never be returned to or stored by Flutter.
-The backend should return ISO-8601 timestamps with an explicit offset or IANA
-timezone and omit cancelled events.
+The profile renders the returned free intervals for Monday through Friday.
+When the backend has no schedule data, it shows an empty state rather than
+falling back to mock events. Activities remain local to the existing
+Activities screen and are not modified by calendar synchronization.
 
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,

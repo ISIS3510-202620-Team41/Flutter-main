@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/calendar_models.dart';
-import '../services/calendar_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import '../models/profile_models.dart';
 import '../services/auth_service.dart';
+import '../services/profile_service.dart';
+import '../services/schedule_service.dart';
 import '../theme/app_theme.dart';
 import 'edit_profile_sheet.dart';
 
@@ -14,61 +16,38 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
-  final _calendarService = CalendarService();
+  final _profileService = ProfileService();
+  final _scheduleService = ScheduleService();
   bool _isLoggingOut = false;
-  CalendarConnection _calendar = const CalendarConnection.disconnected();
-  List<CalendarEvent> _googleEvents = const [];
-
-  // User data, hardcoded for now, later it comes from the database
-  String name = 'Juan García';
-  String description =
-      'Estudiante de Diseño · 5to semestre · Me gusta el café ☕ y el código 💻';
+  bool _isLoading = true;
+  bool _isSyncing = false;
+  bool _googleConnected = false;
+  String? _errorMessage;
+  UserProfile? _profile;
 
   final List<String> days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
-  int selectedDay = 3;
+  int selectedDay = (DateTime.now().weekday - 1).clamp(0, 4);
+  late final List<DateTime> _weekdays = _currentWeekdays();
+  List<DayGaps> _weekGaps = const [];
 
-  final List<List<Map<String, dynamic>>> schedule = [
-    [
-      {
-        'title': 'Cálculo',
-        'time': '07:00 - 09:00',
-        'room': 'Sal. 201',
-        'free': false,
-      },
-      {'title': 'Libre', 'time': '09:00 - 12:00', 'room': '', 'free': true},
-    ],
-    [
-      {
-        'title': 'Diseño',
-        'time': '10:00 - 12:00',
-        'room': 'Sal. 310',
-        'free': false,
-      },
-    ],
-    [
-      {
-        'title': 'Física',
-        'time': '09:00 - 11:00',
-        'room': 'Sal. 104',
-        'free': false,
-      },
-    ],
-    [
-      {
-        'title': 'Estadística',
-        'time': '08:00 - 10:00',
-        'room': 'Sal. 105',
-        'free': false,
-      },
-      {'title': 'Libre', 'time': '10:00 - 13:00', 'room': '', 'free': true},
-    ],
-    [
-      {'title': 'Libre', 'time': '08:00 - 12:00', 'room': '', 'free': true},
-    ],
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  List<DateTime> _currentWeekdays() {
+    final today = DateTime.now();
+    final monday = today.subtract(Duration(days: today.weekday - 1));
+    return List.generate(5, (index) {
+      final date = monday.add(Duration(days: index));
+      return DateTime(date.year, date.month, date.day);
+    });
+  }
 
   String get initials {
-    final parts = name.trim().split(' ');
+    final parts = (_profile?.name ?? '').trim().split(' ');
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
     String letters = parts[0][0];
     if (parts.length > 1) letters += parts[1][0];
     return letters.toUpperCase();
@@ -77,15 +56,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void openEdit() {
     showEditProfile(
       context: context,
-      currentName: name,
-      currentDescription: description,
-      onSave: (newName, newDescription) {
-        setState(() {
-          name = newName;
-          description = newDescription;
-        });
+      currentName: _profile?.name ?? '',
+      currentDescription: _profile?.bio ?? '',
+      onSave: (newName, newDescription) async {
+        try {
+          final profile = await _profileService.updateProfile(
+            name: newName.trim(),
+            bio: newDescription.trim(),
+          );
+          if (mounted) setState(() => _profile = profile);
+        } on ProfileException catch (error) {
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(error.message)));
+          }
+        }
       },
     );
+  }
+
+  Future<void> _loadProfile() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final profile = await _profileService.getCurrentUser();
+      await _loadSchedule();
+      if (!mounted) return;
+      setState(() {
+        _profile = profile;
+        _isLoading = false;
+      });
+    } on ProfileException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.message;
+      });
+    }
+  }
+
+  Future<void> _loadSchedule() async {
+    try {
+      final refresh = await _scheduleService.refreshGoogle();
+      _googleConnected = refresh.calendars > 0;
+    } on ScheduleException {
+      _googleConnected = false;
+    }
+
+    final gaps = <DayGaps>[];
+    for (final date in _weekdays) {
+      try {
+        gaps.add(await _scheduleService.getGaps(date: date));
+      } on ScheduleException {
+        // An unavailable schedule is rendered as an empty state.
+      }
+    }
+    _weekGaps = gaps;
+  }
+
+  Future<void> _connectCalendar() async {
+    setState(() => _isSyncing = true);
+    try {
+      final authorization = await GoogleSignIn.instance.authorizationClient
+          .authorizeServer(const ['https://www.googleapis.com/auth/calendar.readonly']);
+      final authCode = authorization?.serverAuthCode;
+      if (authCode == null || authCode.isEmpty) {
+        throw const ScheduleException('Google no devolvió un código de autorización.');
+      }
+      await _scheduleService.syncGoogle(authCode: authCode);
+      await _loadSchedule();
+      if (mounted) Navigator.pop(context);
+    } on ScheduleException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   Future<void> _logout() async {
@@ -106,80 +158,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _connectCalendar() async {
-    await _runCalendarAction(
-      action: () => _calendarService.connect(),
-      loadingStatus: CalendarConnectionStatus.connecting,
-    );
-  }
-
-  Future<void> _syncCalendar() async {
-    await _runCalendarAction(
-      action: () => _calendarService.sync(),
-      loadingStatus: CalendarConnectionStatus.syncing,
-    );
-  }
-
-  Future<void> _runCalendarAction({
-    required Future<CalendarSyncResult> Function() action,
-    required CalendarConnectionStatus loadingStatus,
-  }) async {
-    setState(
-      () => _calendar = _calendar.copyWith(
-        status: loadingStatus,
-        clearError: true,
-      ),
-    );
+  Future<void> _refreshCalendar() async {
+    setState(() => _isSyncing = true);
     try {
-      final result = await action();
-      if (!mounted) return;
-      setState(() {
-        _calendar = result.connection;
-        _googleEvents = result.events;
-      });
-      Navigator.pop(context);
-    } on CalendarException catch (error) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-      setState(
-        () => _calendar = _calendar.copyWith(
-          status: CalendarConnectionStatus.error,
-          errorMessage: error.message,
-        ),
-      );
-    }
-  }
-
-  Future<void> _disconnectCalendar() async {
-    setState(
-      () => _calendar = _calendar.copyWith(
-        status: CalendarConnectionStatus.syncing,
-        clearError: true,
-      ),
-    );
-    try {
-      await _calendarService.disconnect();
-      if (!mounted) return;
-      setState(() {
-        _calendar = const CalendarConnection.disconnected();
-        _googleEvents = const [];
-      });
-      Navigator.pop(context);
-    } on CalendarException catch (error) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-      setState(
-        () => _calendar = _calendar.copyWith(
-          status: CalendarConnectionStatus.error,
-          errorMessage: error.message,
-        ),
-      );
+      await _scheduleService.refreshGoogle();
+      await _loadSchedule();
+      if (mounted) Navigator.pop(context);
+    } on ScheduleException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
     }
   }
 
@@ -192,41 +184,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => _CalendarSyncSheet(
-        connection: _calendar,
+        connected: _googleConnected,
+        isLoading: _isSyncing,
         onConnect: _connectCalendar,
-        onSync: _syncCalendar,
-        onDisconnect: _disconnectCalendar,
+        onRefresh: _refreshCalendar,
       ),
     );
   }
 
-  List<Map<String, dynamic>> _itemsForDay(int dayIndex) {
-    final items = List<Map<String, dynamic>>.from(schedule[dayIndex]);
-    for (final event in _googleEvents) {
-      if (event.startsAt.weekday != dayIndex + 1) continue;
-      items.add({
-        'title': event.title,
-        'time': event.allDay
-            ? 'Todo el día'
-            : '${_time(event.startsAt)} - ${_time(event.endsAt)}',
-        'room': event.location ?? '',
-        'free': false,
-        'source': event.source,
-      });
-    }
-    return items;
-  }
-
-  String _time(DateTime date) {
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final dayItems = _itemsForDay(selectedDay);
-    final freeWindows = dayItems.where((c) => c['free'] == true).length;
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final dayGaps = _weekGaps
+        .where((gaps) => gaps.date == _weekdays[selectedDay])
+        .expand((gaps) => gaps.free)
+        .toList(growable: false);
+    final freeWindows = dayGaps.length;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -288,7 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              name,
+                              _profile?.name ?? '',
                               style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.w700,
@@ -296,7 +273,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              description,
+                              _profile?.bio ?? '',
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF4A5A66),
@@ -349,9 +326,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Row(
                       children: [
-                        statItem(Icons.bolt, '12', 'Actividades'),
-                        statItem(Icons.people, '8', 'Amigos'),
-                        statItem(Icons.hourglass_bottom, '6h', 'Horas libres'),
+                        statItem(Icons.bolt, '—', 'Actividades'),
+                        statItem(Icons.people, '—', 'Amigos'),
+                        statItem(
+                          Icons.hourglass_bottom,
+                          _hoursFor(dayGaps),
+                          'Horas libres',
+                        ),
                       ],
                     ),
                   ),
@@ -413,8 +394,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  if (_calendar.errorMessage != null)
-                    _calendarError(_calendar.errorMessage!),
+                  if (_errorMessage != null) _calendarError(_errorMessage!),
                   const SizedBox(height: 14),
                   // The day buttons
                   Row(
@@ -458,7 +438,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }),
                   ),
                   const SizedBox(height: 14),
-                  ...dayItems.map((item) => classCard(item)),
+                  if (dayGaps.isEmpty)
+                    _emptySchedule(),
+                  ...dayGaps.map(classCard),
                 ],
               ),
             ),
@@ -488,30 +470,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _calendarAction() {
-    final connected =
-        _calendar.status == CalendarConnectionStatus.connected ||
-        _calendar.status == CalendarConnectionStatus.syncing;
-    final loading =
-        _calendar.status == CalendarConnectionStatus.connecting ||
-        _calendar.status == CalendarConnectionStatus.syncing;
     return OutlinedButton.icon(
-      onPressed: loading ? null : _openCalendarSync,
+      onPressed: _isSyncing ? null : _openCalendarSync,
       icon: Icon(
-        connected ? Icons.check_circle_outline : Icons.calendar_month_outlined,
+        _googleConnected
+            ? Icons.check_circle_outline
+            : Icons.calendar_month_outlined,
         size: 16,
       ),
       label: Text(
-        loading
+        _isSyncing
             ? 'Sincronizando...'
-            : connected
+            : _googleConnected
             ? 'Google Calendar'
             : 'Conectar calendario',
         style: const TextStyle(fontSize: 11),
       ),
       style: OutlinedButton.styleFrom(
-        foregroundColor: connected ? AppColors.green : AppColors.blue,
+        foregroundColor: _googleConnected ? AppColors.green : AppColors.blue,
         side: BorderSide(
-          color: connected ? const Color(0xFFBDE8CE) : AppColors.blue,
+          color: _googleConnected
+              ? const Color(0xFFBDE8CE)
+              : AppColors.blue,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       ),
@@ -540,25 +520,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget classCard(Map<String, dynamic> item) {
-    final bool isFree = item['free'];
-    final Color borderColor = isFree ? AppColors.green : AppColors.blue;
+  Widget _emptySchedule() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+      child: Column(
+        children: [
+          Icon(Icons.event_busy_outlined, size: 36, color: AppColors.grey),
+          SizedBox(height: 10),
+          Text(
+            'No hay bloques de horario para este día.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: AppColors.grey),
+          ),
+        ],
+      ),
+    );
+  }
 
+  String _hoursFor(List<FreeInterval> gaps) {
+    final minutes = gaps.fold<int>(
+      0,
+      (total, gap) => total + gap.end.difference(gap.start).inMinutes,
+    );
+    return '${(minutes / 60).toStringAsFixed(1)}h';
+  }
+
+  String _time(DateTime date) {
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  Widget classCard(FreeInterval interval) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: isFree ? AppColors.greenLight : Colors.white,
+        color: AppColors.greenLight,
         borderRadius: BorderRadius.circular(14),
-        border: isFree ? Border.all(color: const Color(0xFFBDE8CE)) : null,
-        boxShadow: isFree
-            ? null
-            : const [BoxShadow(color: Color(0x14000000), blurRadius: 8)],
+        border: Border.all(color: const Color(0xFFBDE8CE)),
       ),
       child: IntrinsicHeight(
         child: Row(
           children: [
-            Container(width: 4, color: borderColor),
+            Container(width: 4, color: AppColors.green),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -569,15 +574,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          item['title'],
-                          style: TextStyle(
+                          'Ventana libre',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: isFree ? AppColors.green : Colors.black,
+                            color: AppColors.green,
                           ),
                         ),
-                        if (isFree)
-                          Container(
+                        Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
                               vertical: 3,
@@ -595,12 +599,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                           ),
-                        if (item['source'] == 'google')
-                          const Icon(
-                            Icons.calendar_month_outlined,
-                            size: 16,
-                            color: AppColors.blue,
-                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -613,22 +611,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          item['time'],
+                          '${_time(interval.start)} - ${_time(interval.end)}',
                           style: const TextStyle(fontSize: 13),
                         ),
-                        if (item['room'] != '') ...[
-                          const SizedBox(width: 14),
-                          const Icon(
-                            Icons.meeting_room_outlined,
-                            size: 14,
-                            color: AppColors.grey,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            item['room'],
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ],
                       ],
                     ),
                   ],
@@ -644,25 +629,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 class _CalendarSyncSheet extends StatelessWidget {
   const _CalendarSyncSheet({
-    required this.connection,
+    required this.connected,
+    required this.isLoading,
     required this.onConnect,
-    required this.onSync,
-    required this.onDisconnect,
+    required this.onRefresh,
   });
 
-  final CalendarConnection connection;
+  final bool connected;
+  final bool isLoading;
   final VoidCallback onConnect;
-  final VoidCallback onSync;
-  final VoidCallback onDisconnect;
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    final isConnected =
-        connection.status == CalendarConnectionStatus.connected ||
-        connection.status == CalendarConnectionStatus.syncing;
-    final isLoading =
-        connection.status == CalendarConnectionStatus.connecting ||
-        connection.status == CalendarConnectionStatus.syncing;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -703,40 +682,22 @@ class _CalendarSyncSheet extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            isConnected
-                ? 'Tus eventos se muestran en el horario y se mantienen en modo solo lectura.'
-                : 'Conecta tu calendario para ver tus eventos junto a tu horario.',
+            connected
+                ? 'Los intervalos de tu calendario se muestran en modo solo lectura.'
+                : 'Conecta Google Calendar para calcular tu horario real.',
             style: const TextStyle(fontSize: 13, color: AppColors.grey),
           ),
-          if (connection.email != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              connection.email!,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-          ],
-          if (connection.lastSyncedAt != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Última sincronización: ${_formatDate(connection.lastSyncedAt!)}',
-              style: const TextStyle(fontSize: 12, color: AppColors.grey),
-            ),
-          ],
           const SizedBox(height: 18),
           if (isLoading)
             const Center(child: CircularProgressIndicator())
-          else if (isConnected) ...[
+          else if (connected) ...[
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: onSync,
+                onPressed: onRefresh,
                 icon: const Icon(Icons.sync),
-                label: const Text('Sincronizar ahora'),
+                label: const Text('Actualizar calendario'),
               ),
-            ),
-            TextButton(
-              onPressed: onDisconnect,
-              child: const Text('Desconectar Google Calendar'),
             ),
           ] else
             SizedBox(
@@ -752,8 +713,4 @@ class _CalendarSyncSheet extends StatelessWidget {
     );
   }
 
-  static String _formatDate(DateTime date) {
-    final local = date.toLocal();
-    return '${local.day}/${local.month} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
 }
