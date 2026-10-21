@@ -5,7 +5,7 @@ void showEditProfile({
   required BuildContext context,
   required String currentName,
   required String currentDescription,
-  required Future<void> Function(String name, String description) onSave,
+  required Future<String?> Function(String name, String description) onSave,
   String? currentAvatarUrl,
   required Future<String?> Function() onTakePhoto,
 }) {
@@ -52,11 +52,13 @@ class _EditProfileContentState extends State<EditProfileContent> {
   final urlController = TextEditingController();
   String? avatarUrl;
   bool uploadingPhoto = false;
+  String? photoError;
+  String? saveError;
+  bool saving = false;
 
   @override
   void initState() {
     super.initState();
-    // Start with what the profile already had
     avatarUrl = widget.currentAvatarUrl;
     nameController = TextEditingController(text: widget.currentName);
     descriptionController = TextEditingController(
@@ -74,11 +76,21 @@ class _EditProfileContentState extends State<EditProfileContent> {
 
   Future<void> _takePhoto() async {
     if (uploadingPhoto) return;
-    setState(() => uploadingPhoto = true);
-    final newUrl = await widget.onTakePhoto();
+    setState(() {
+      uploadingPhoto = true;
+      photoError = null;
+    });
+    String? newUrl;
+    String? error;
+    try {
+      newUrl = await widget.onTakePhoto();
+    } catch (e) {
+      error = e.toString();
+    }
     if (!mounted) return;
     setState(() {
       uploadingPhoto = false;
+      photoError = error;
       if (newUrl != null) avatarUrl = newUrl;
     });
   }
@@ -106,11 +118,11 @@ class _EditProfileContentState extends State<EditProfileContent> {
     final initials = nameController.text.trim().isEmpty
         ? '?'
         : nameController.text
-              .trim()
-              .split(' ')
-              .take(2)
-              .map((p) => p[0].toUpperCase())
-              .join();
+        .trim()
+        .split(' ')
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -199,8 +211,20 @@ class _EditProfileContentState extends State<EditProfileContent> {
                 ],
               ),
             ),
+            if (photoError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Center(
+                  child: Text(
+                    photoError!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.rosewood,
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(height: 14),
-            // URL field + "Usar" button
             Row(
               children: [
                 Expanded(
@@ -259,15 +283,42 @@ class _EditProfileContentState extends State<EditProfileContent> {
               maxLines: 3,
               decoration: fieldStyle(),
             ),
+            if (saveError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  saveError!,
+                  style: const TextStyle(fontSize: 12, color: AppColors.rosewood),
+                ),
+              ),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () async {
-                  await widget.onSave(
-                    nameController.text,
-                    descriptionController.text,
-                  );
+                onPressed: saving
+                    ? null
+                  :() async {
+                  setState(() {
+                    saving = true;
+                    saveError = null;
+                  });
+                  try {
+                    await widget.onSave(
+                      nameController.text,
+                      descriptionController.text,
+                    );
+
+                    if (!mounted) return;
+
+                    Navigator.pop(context);
+                  } catch (e) {
+                    if (!mounted) return;
+
+                    setState(() {
+                      saving = false;
+                      saveError = e.toString();
+                    });
+                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.rosewood,

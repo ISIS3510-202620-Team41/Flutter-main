@@ -38,6 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _profileViewModel = ProfileViewModel();
     _loadProfile();
+    _recoverLostPhoto();
   }
 
   @override
@@ -76,58 +77,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
             name: newName.trim(),
             bio: newDescription.trim(),
           );
-          if (mounted && profile != null) setState(() => _profile = profile);
-          if (profile == null && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  _profileViewModel.errorMessage ??
-                      'No pudimos actualizar tu perfil.',
-                ),
-              ),
-            );
+          if (profile == null) {
+            return _profileViewModel.errorMessage ?? 'No pudimos actualizar tu perfil.';
           }
+          if (mounted) setState(() => _profile = profile);
+          return null;
         } on ProfileException catch (error) {
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(error.message)));
-          }
+          return error.message;
+        } catch (_) {
+          return 'No pudimos actualizar tu perfil, revisa tu conexión';
         }
       },
     );
-  }
+          }
 
   Future<String?> _takeProfilePhoto() async {
+    XFile? photo;
     try {
-      final photo = await _picker.pickImage(
+      photo = await _picker.pickImage(
         source: ImageSource.camera,
         maxWidth: 1024, // el backend la reduce a 512 igual y acepta hasta 5 MB
         imageQuality: 85,
         preferredCameraDevice: CameraDevice.front,
       );
-      if (photo == null) return null; // el usuario canceló
-      final profile = await _profileViewModel.uploadAvatar(photo.path);
-      if (mounted && profile != null) setState(() => _profile = profile);
-      if (profile == null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _profileViewModel.errorMessage ??
-                  'No pudimos subir la foto de perfil.',
-            ),
-          ),
-        );
-      }
-      return profile?.avatarUrl;
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No pudimos abrir la cámara.')),
-        );
-      }
+      throw const ProfileException('No pudimos abrir la cámara.');
     }
-    return null;
+    if (photo == null) return null;
+
+    final profile = await _profileViewModel.uploadAvatar(photo.path);
+    if (profile == null) {
+      throw ProfileException(
+        _profileViewModel.errorMessage ?? 'No pudimos subir la foto de perfil.',
+      );
+    }
+    if (mounted) setState(() => _profile = profile);
+    return profile.avatarUrl;
+  }
+
+  Future<void> _recoverLostPhoto() async {
+    try {
+      final lost = await _picker.retrieveLostData();
+      final file = lost.file;
+      if (lost.isEmpty || file == null) return;
+      final profile = await _profileViewModel.uploadAvatar(file.path);
+      if (mounted && profile != null) setState(() => _profile = profile);
+    } catch (_) {
+      // Nothing to recovers
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -181,8 +178,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final authorization = await GoogleSignIn.instance.authorizationClient
           .authorizeServer(const [
-            'https://www.googleapis.com/auth/calendar.readonly',
-          ]);
+        'https://www.googleapis.com/auth/calendar.readonly',
+      ]);
       final authCode = authorization?.serverAuthCode;
       if (authCode == null || authCode.isEmpty) {
         throw const ScheduleException(
@@ -298,13 +295,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 : NetworkImage(_profile!.avatarUrl!),
                             child: _profile?.avatarUrl == null
                                 ? Text(
-                                    initials,
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  )
+                              initials,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            )
                                 : null,
                           ),
                           Positioned(
@@ -601,7 +598,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _hoursFor(List<FreeInterval> gaps) {
     final minutes = gaps.fold<int>(
       0,
-      (total, gap) => total + gap.end.difference(gap.start).inMinutes,
+          (total, gap) => total + gap.end.difference(gap.start).inMinutes,
     );
     return '${(minutes / 60).toStringAsFixed(1)}h';
   }

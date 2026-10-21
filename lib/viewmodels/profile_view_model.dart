@@ -65,6 +65,8 @@ class ProfileViewModel extends ChangeNotifier {
       errorMessage = error.message;
     } on FormatException catch (error) {
       errorMessage = error.message;
+    } catch (_) {
+      errorMessage = 'No pudimos subir la foto. Revisa tu conexión.';
     } finally {
       isUploadingAvatar = false;
       notifyListeners();

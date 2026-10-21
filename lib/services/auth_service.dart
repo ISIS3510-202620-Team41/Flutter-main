@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,12 +15,14 @@ final authSession = AuthSession();
 
 class AuthService {
   AuthService({http.Client? client, String? baseUrl})
-    : _client = client ?? http.Client(),
-      _baseUrl =
-          baseUrl ?? (_env('API_BASE_URL') ?? 'http://10.0.2.2:8080/api');
+      : _client = client ?? http.Client(),
+        _baseUrl =
+            baseUrl ?? (_env('API_BASE_URL') ?? 'http://10.0.2.2:8080/api');
 
   final http.Client _client;
   final String _baseUrl;
+
+  String get baseUrl => _baseUrl;
 
   Future<RegistrationResult> register({
     required String name,
@@ -199,6 +203,44 @@ class AuthService {
     return response;
   }
 
+  // Sends the image with a real image type (jpeg, png or webp).
+  // The type is read from the first bytes of the file, because the file
+  // name from the camera may have no extension and then the server
+  // receives "application/octet-stream" and says "format not allowed".
+  Future<http.MultipartFile> _imageFile(String field, String filePath) async {
+    final bytes = <int>[];
+    await for (final chunk in File(filePath).openRead(0, 12)) {
+      bytes.addAll(chunk);
+    }
+
+    var subtype = 'jpeg';
+    var extension = 'jpg';
+    final isPng = bytes.length >= 4 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47;
+    final isWebp = bytes.length >= 12 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50;
+    if (isPng) {
+      subtype = 'png';
+      extension = 'png';
+    } else if (isWebp) {
+      subtype = 'webp';
+      extension = 'webp';
+    }
+
+    return http.MultipartFile.fromPath(
+      field,
+      filePath,
+      filename: 'avatar.$extension',
+      contentType: MediaType('image', subtype),
+    );
+  }
+
   Future<http.Response> authenticatedMultipart({
     required String path,
     required String field,
@@ -213,7 +255,7 @@ class AuthService {
     Future<http.Response> send(String token) async {
       final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl$path'))
         ..headers['Authorization'] = 'Bearer $token'
-        ..files.add(await http.MultipartFile.fromPath(field, filePath));
+        ..files.add(await _imageFile(field, filePath));
       return http.Response.fromStream(await _client.send(request));
     }
 
@@ -273,10 +315,10 @@ class AuthService {
   }
 
   void _throwForError(
-    int statusCode,
-    Map<String, dynamic> body,
-    String action,
-  ) {
+      int statusCode,
+      Map<String, dynamic> body,
+      String action,
+      ) {
     if (statusCode >= 200 && statusCode < 300) return;
     throw AuthException(
       message: body['message'] as String? ?? 'No fue posible $action.',
@@ -331,10 +373,10 @@ class AuthException implements Exception {
 
 class SessionExpiredException extends AuthException {
   const SessionExpiredException()
-    : super(
-        message: 'Tu sesión expiró. Inicia sesión nuevamente.',
-        statusCode: 401,
-      );
+      : super(
+    message: 'Tu sesión expiró. Inicia sesión nuevamente.',
+    statusCode: 401,
+  );
 }
 
 class AuthSession extends ChangeNotifier {

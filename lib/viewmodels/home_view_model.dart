@@ -18,7 +18,20 @@ class HomeViewModel extends ChangeNotifier {
         _scheduleService = scheduleService ?? ScheduleService(),
         _activityService = activityService ?? ActivityService(),
         _locationService = locationService ?? LocationService(),
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now {
+          currentProfile.addListener(_onProfileChanged);
+}
+  void _onProfileChanged(){
+    final updated = currentProfile.value;
+    if (updated == null) return;
+    profile = updated;
+    notifyListeners();
+  }
+  @override
+  void dispose() {
+    currentProfile.removeListener(_onProfileChanged);
+    super.dispose();
+  }
 
   final ProfileService _profileService;
   final ScheduleService _scheduleService;
@@ -35,6 +48,7 @@ class HomeViewModel extends ChangeNotifier {
   String? recommendationId;
   int? recommendationFreeMinutes;
   String? recommendationsError;
+  bool usedFallbackLocation = false;
   String? actionMessage;
 
   String get greetingName {
@@ -84,6 +98,7 @@ class HomeViewModel extends ChangeNotifier {
     recommendationsError = null;
     try {
       final where = await _locationService.current();
+      usedFallbackLocation = where.isFallback;
       final batch = await _activityService.getRecommendations(
         lat: where.lat,
         lon: where.lon,
