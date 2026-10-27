@@ -158,6 +158,19 @@ class AuthService {
       }
     } finally {
       await clearSession();
+
+      //Cerramos aca la sesion que se tiene con google si esta activa
+      try {
+        await initializeGoogleSignIn();
+        await GoogleSignIn.instance.signOut();
+
+        _googleAccount = null;
+
+        debugPrint('[GOOGLE][SIGNOUT] Sesion de google del usuario cerrada');
+      } catch (error, stackTrace){
+        debugPrint('[GOOGLE][SIGNOUT][ERROR] $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
     }
   }
 
