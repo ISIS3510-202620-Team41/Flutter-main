@@ -5,26 +5,31 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'analytics_screen_catalog.dart';
+import 'analytics_event_queue.dart';
+import 'shared_preferences_analytics_event_queue.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+
 class AnalyticsFacade {
-  AnalyticsFacade({http.Client? client})
-    : _client = client ?? http.Client(),
-      _uuid = const Uuid();
+  AnalyticsFacade({
+    http.Client? client,
+    AnalyticsEventQueue? eventQueue,
+    }) : _client = client ?? http.Client(),
+         _eventQueue = eventQueue ?? SharedPreferencesAnalyticsEventQueue(),
+         _uuid = const Uuid();
 
   static final instance = AnalyticsFacade();
 
-  static const _queueKey = 'analytics_event_queue';
-  static const _crashKey = 'analytics_pending_crashes';
   static String get _baseUrl =>
       _env('ANALYTICS_BASE_URL') ?? 'http://10.0.2.2:8000';
   static String get _ingestKey => _env('ANALYTICS_INGEST_KEY') ?? '';
 
   final http.Client _client;
   final Uuid _uuid;
-  SharedPreferences? _preferences;
+  final AnalyticsEventQueue _eventQueue;
+  bool _isInitialized = false;
+
   String? _userId;
   String? _currentScreen;
   String _currentDashboardTab = AnalyticsScreenCatalog.home;
@@ -33,20 +38,18 @@ class AnalyticsFacade {
   bool _isFlushing = false;
 
   Future<void> initialize() async {
-    _preferences = await SharedPreferences.getInstance();
+    await _eventQueue.initialize();
+
     _sessionId = _uuid.v4();
-    final pendingCrashes = _preferences!.getStringList(_crashKey) ?? [];
-    for (final encoded in pendingCrashes) {
-      try {
-        final crash = jsonDecode(encoded);
-        if (crash is Map<String, dynamic>) {
-          await _trackEvent('crash', crash);
-        }
-      } on FormatException {
-        debugPrint('Discarding malformed persisted crash event.');
-      }
+    _isInitialized = true;
+
+    final pendingCrashes = await _eventQueue.readPendingCrashes();
+    
+    for (final crash in pendingCrashes) {
+      await _trackEvent('crash',crash);
     }
-    await _preferences!.remove(_crashKey);
+
+    await _eventQueue.clearPendingCrashes();
   }
 
   void setUserId(String? userId) {
@@ -81,8 +84,7 @@ class AnalyticsFacade {
   }
 
   Future<void> _trackEvent(String eventType, [Map<String, dynamic> fields = const {},]) async {
-    final preferences = _preferences;
-    if (preferences == null) return;
+    if (!_isInitialized) return;
 
     // Se agregan campos comunes a todos los eventos mas los adicionales especificos
     final event = <String, dynamic>{
@@ -96,69 +98,57 @@ class AnalyticsFacade {
     final appVersion = _env('APP_VERSION') ?? '1.0.0';
     event['appVersion'] = appVersion;
 
-    await _saveEvent(event);
+    await _eventQueue.enqueueEvent(event);
   }
 
   Future<void> recordCrash({String? component, required Object error}) async {
-    final preferences = _preferences;
-    if (preferences == null) return;
-    final crashes = preferences.getStringList(_crashKey) ?? [];
-    crashes.add(
-      jsonEncode({
-        'screen': _currentScreen ?? 'Unknown',
-        'component': ?component,
-        'exceptionType': error.runtimeType.toString(),
-      }),
-    );
-    await preferences.setStringList(_crashKey, crashes);
+    if (!_isInitialized) return;
+
+    await _eventQueue.enqueuePendingCrash({
+      'screen': _currentScreen ?? 'Unknown',
+      'component': ?component,
+      'exceptionType': error.runtimeType.toString(),
+    });
   }
 
   Future<void> flush() async {
-    final preferences = _preferences;
     final userId = _userId;
-    if (_isFlushing || preferences == null || userId == null) return;
 
-    final events = _readEvents(preferences).take(200).toList();
-    if (events.isEmpty) return;
+    if (_isFlushing || !_isInitialized || userId == null){
+      return;
+    }
+
     _isFlushing = true;
+
     try {
-      final response = await _client
-          .post(
-            Uri.parse('$_baseUrl/events/batch'),
-            headers: {
-              'Content-Type': 'application/json',
-              if (_ingestKey.isNotEmpty) 'X-API-Key': _ingestKey,
-            },
-            body: jsonEncode({
-              'events': events
-                  .map((event) => {...event, 'userId': userId})
-                  .toList(),
-            }),
-          )
-          .timeout(const Duration(seconds: 2));
-      if (response.statusCode == 201 ||
-          response.statusCode == 401 ||
-          response.statusCode == 422) {
-        final discardedIds = events
-            .map((event) => event['eventId'])
-            .whereType<String>()
-            .toSet();
-        final remaining = _readEvents(
-          preferences,
-        ).where((event) => !discardedIds.contains(event['eventId'])).toList();
-        await _saveEvents(remaining);
-        if (response.statusCode != 201) {
-          debugPrint(
-            'Analytics batch discarded with HTTP ${response.statusCode}.',
-          );
-        }
-      } else if (response.statusCode >= 500) {
-        debugPrint('Analytics engine unavailable; retaining event queue.');
+      final events = await _eventQueue.readBatch(limit: 200);
+      
+      if (events.isEmpty) return;
+
+      final response = await _client.post(
+        Uri.parse('$_baseUrl/events/batch'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_ingestKey.isNotEmpty) 'X-API-Key': _ingestKey,
+        },
+        body: jsonEncode({
+          'events': events.map((event) => {...event, 'userId': userId}).toList(),
+        }),
+      ).timeout(const Duration(seconds: 2));
+
+      int statusCode = response.statusCode;
+
+      if (statusCode == 201 || statusCode == 401 || statusCode == 422) {
+        final discardedIds = events.map((event) => event['eventId']).whereType<String>().toSet();
+
+        await _eventQueue.removeEventsById(discardedIds);
+
+      } if (statusCode !=201) {
+        debugPrint('Analytics batch discarded with HTPP ''$statusCode.',);
+      } else if (statusCode >= 500) {
+        debugPrint('Analytics engine unavailable; retaining event queue.',);
       } else {
-        debugPrint(
-          'Analytics batch failed with unexpected HTTP '
-          '${response.statusCode}; retaining event queue.',
-        );
+        debugPrint( 'Analytics batch failed with unexpected HTTP ''$statusCode; retaining event queue.',);
       }
     } on SocketException catch (error) {
       debugPrint('Analytics network error: $error');
@@ -167,33 +157,6 @@ class AnalyticsFacade {
     } finally {
       _isFlushing = false;
     }
-  }
-
-  List<Map<String, dynamic>> _readEvents(SharedPreferences preferences) {
-    return (preferences.getStringList(_queueKey) ?? [])
-        .map((encoded) {
-          try {
-            final decoded = jsonDecode(encoded);
-            return decoded is Map<String, dynamic> ? decoded : null;
-          } on FormatException {
-            return null;
-          }
-        })
-        .whereType<Map<String, dynamic>>()
-        .toList();
-  }
-
-  Future<void> _saveEvent(Map<String, dynamic> event) async {
-    final preferences = _preferences!;
-    final events = _readEvents(preferences)..add(event);
-    await _saveEvents(events);
-  }
-
-  Future<void> _saveEvents(List<Map<String, dynamic>> events) {
-    return _preferences!.setStringList(
-      _queueKey,
-      events.map(jsonEncode).toList(),
-    );
   }
 
   String? decodeUserId(String accessToken) {
