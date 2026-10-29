@@ -8,16 +8,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'analytics_screen_catalog.dart';
 import 'analytics_event_queue.dart';
 import 'shared_preferences_analytics_event_queue.dart';
-import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 
 class AnalyticsFacade {
   AnalyticsFacade({
-    http.Client? client,
     AnalyticsEventQueue? eventQueue,
     AnalyticsIngestionService? ingestionService,
-    }) : _ingestionService = ingestionService ?? HttpAnalyticsIngestionService(client: client),
+    }) : _ingestionService = ingestionService ?? HttpAnalyticsIngestionService(),
          _eventQueue = eventQueue ?? SharedPreferencesAnalyticsEventQueue(),
          _uuid = const Uuid();
 

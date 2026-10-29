@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:llamalla/analytics/analytics_facade.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:llamalla/analytics/http_analytics_ingestion_service.dart';
 
 void main() {
   test('decodes the UUID subject from an access token', () {
@@ -33,7 +34,11 @@ void main() {
 
       return http.Response('{}', 201);
     });
-    final facade = AnalyticsFacade(client: client);
+    final facade = AnalyticsFacade(
+    ingestionService: HttpAnalyticsIngestionService(
+    client: client,
+  ),
+);
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -49,7 +54,11 @@ void main() {
     SharedPreferences.setMockInitialValues({});
 
     final client = MockClient((_) async => http.Response('{}', 503));
-    final facade = AnalyticsFacade(client: client);
+    final facade = AnalyticsFacade(
+    ingestionService: HttpAnalyticsIngestionService(
+    client: client,
+  ),
+);
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -160,7 +169,11 @@ void main() {
       final client = MockClient(
           (_) async => http.Response('{}', statusCode),
         );
-      final facade = AnalyticsFacade(client: client);
+      final facade = AnalyticsFacade(
+        ingestionService: HttpAnalyticsIngestionService(
+        client: client,
+      ),
+    );
 
       await facade.initialize();
       facade.setUserId('user-uuid');
@@ -180,7 +193,11 @@ void main() {
     final client = MockClient(
       (_) async => http.Response('{}', 400),
     );
-    final facade = AnalyticsFacade(client: client);
+    final facade = AnalyticsFacade(
+      ingestionService: HttpAnalyticsIngestionService(
+      client: client,
+      ),
+    );
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -209,7 +226,11 @@ void main() {
       return http.Response('{}', statusCode);
     });
 
-    final facade = AnalyticsFacade(client: client);
+    final facade = AnalyticsFacade(
+  ingestionService: HttpAnalyticsIngestionService(
+    client: client,
+  ),
+);
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -249,7 +270,11 @@ void main() {
       return http.Response('{}', 201);
     });
 
-    final facade = AnalyticsFacade(client: client);
+    final facade = AnalyticsFacade(
+  ingestionService: HttpAnalyticsIngestionService(
+    client: client,
+  ),
+);
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -289,7 +314,11 @@ void main() {
       return http.Response('{}', 201);
     });
 
-    final facade = AnalyticsFacade(client: client);
+    final facade = AnalyticsFacade(
+      ingestionService: HttpAnalyticsIngestionService(
+        client: client,
+      ),
+    );
 
     await facade.initialize();
     await facade.trackScreenView(screen: 'Home');
@@ -326,7 +355,11 @@ void main() {
       return http.Response('{}', 201);
     });
 
-    final facade = AnalyticsFacade(client: client);
+    final facade = AnalyticsFacade(
+      ingestionService: HttpAnalyticsIngestionService(
+        client: client,
+      ),
+    );
 
     await facade.initialize();
     facade.setUserId('user-uuid');

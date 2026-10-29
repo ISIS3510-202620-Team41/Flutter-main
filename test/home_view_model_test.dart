@@ -7,16 +7,19 @@ import 'package:llamalla/services/profile_service.dart';
 import 'package:llamalla/services/schedule_service.dart';
 import 'package:llamalla/viewmodels/home_view_model.dart';
 import 'package:http/http.dart' as http;
+import 'package:llamalla/analytics/http_analytics_ingestion_service.dart';
 import 'package:http/testing.dart';
 import 'package:llamalla/analytics/analytics_facade.dart';
 
 class _RecordingAnalyticsFacade extends AnalyticsFacade {
   _RecordingAnalyticsFacade()
-      : super(
+    : super(
+        ingestionService: HttpAnalyticsIngestionService(
           client: MockClient(
             (_) async => http.Response('', 200),
           ),
-        );
+        ),
+      );
 
   final List<Map<String, String?>> featureEvents = [];
 

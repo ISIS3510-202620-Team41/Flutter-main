@@ -3,14 +3,17 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:llamalla/analytics/analytics_facade.dart';
 import 'package:llamalla/viewmodels/dashboard_view_model.dart';
+import 'package:llamalla/analytics/http_analytics_ingestion_service.dart';
 
 class RecordingAnalyticsFacade extends AnalyticsFacade {
   RecordingAnalyticsFacade()
-      : super(
+    : super(
+        ingestionService: HttpAnalyticsIngestionService(
           client: MockClient(
             (_) async => http.Response('', 200),
           ),
-        );
+        ),
+      );
 
   final List<String> screenViews = [];
   final List<Map<String, String?>> featureEvents = [];
