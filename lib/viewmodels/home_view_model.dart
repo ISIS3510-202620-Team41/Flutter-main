@@ -6,6 +6,8 @@ import '../services/profile_service.dart';
 import '../services/schedule_service.dart';
 import '../services/activity_service.dart';
 import '../services/location_service.dart';
+import '../analytics/analytics_feature_catalog.dart';
+import '../analytics/analytics_facade.dart';
 
 class HomeViewModel extends ChangeNotifier {
   HomeViewModel({
@@ -14,17 +16,22 @@ class HomeViewModel extends ChangeNotifier {
     ActivityService? activityService,
     LocationService? locationService,
     DateTime Function()? now,
+    AnalyticsFacade? analyticsFacade,
   })  : _profileService = profileService ?? ProfileService(),
         _scheduleService = scheduleService ?? ScheduleService(),
         _activityService = activityService ?? ActivityService(),
         _locationService = locationService ?? LocationService(),
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now,
+        _analyticsFacade = analyticsFacade ?? AnalyticsFacade.instance;
 
   final ProfileService _profileService;
   final ScheduleService _scheduleService;
   final ActivityService _activityService;
   final LocationService _locationService;
+  final AnalyticsFacade _analyticsFacade;
   final DateTime Function() _now;
+
+  bool _recommendationsViewTracked = false; //Evita registrar continuamente el acceso
 
   UserProfile? profile;
   FreeInterval? nextFreeInterval;
@@ -91,6 +98,18 @@ class HomeViewModel extends ChangeNotifier {
       recommendations = batch.activities;
       recommendationId = batch.recommendationId;
       recommendationFreeMinutes = batch.freeMinutes;
+
+      if (! _recommendationsViewTracked) {
+        try {
+          await _analyticsFacade.trackFeatureUsed(
+            feature: AnalyticsFeatureCatalog.activityRecommendations,
+            action: AnalyticsFeatureCatalog.viewRecommendationsAction,
+            screen: AnalyticsFeatureCatalog.activityRecommendationsScreen,
+          );
+        } catch (_) {
+        }
+      }
+
     } on ActivityException catch (error) {
       recommendations = const [];
       recommendationsError = error.message;
@@ -99,6 +118,7 @@ class HomeViewModel extends ChangeNotifier {
       recommendationsError = 'No pudimos cargar las recomendaciones.';
     }
   }
+
   Future<bool> choose(Activity activity) async {
     final id = activity.id;
     if (id == null) return false;
@@ -109,6 +129,16 @@ class HomeViewModel extends ChangeNotifier {
         recommendationId: recommendationId,
         freeTimeMinutes: recommendationFreeMinutes,
       );
+
+      try {
+        await _analyticsFacade.trackFeatureUsed(
+          feature: AnalyticsFeatureCatalog.activityJoining,
+          action: AnalyticsFeatureCatalog.joinRecommendedActivityAction,
+          screen: AnalyticsFeatureCatalog.activityJoiningScreen,
+        );
+      } catch (_) {
+      }
+
       recommendations = recommendations.where((a) => a.id != id).toList();
       notifyListeners();
       return true;
