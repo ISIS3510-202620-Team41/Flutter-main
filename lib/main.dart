@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app.dart';
-import 'services/analytics_facade.dart';
+import 'analytics/analytics_facade.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

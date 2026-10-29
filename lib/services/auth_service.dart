@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'analytics_facade.dart';
+import '../analytics/analytics_facade.dart';
 
 final authSession = AuthSession();
 

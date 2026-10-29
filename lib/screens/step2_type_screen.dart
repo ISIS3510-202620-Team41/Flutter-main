@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../widgets/step_header.dart';
 import 'step3_place_screen.dart';
 import '../viewmodels/friends_view_model.dart';
+import '../navigation/app_routes.dart';
 
 class Step2TypeScreen extends StatefulWidget {
   final List<String> friends;
@@ -109,7 +110,10 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                             : () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            MaterialPageRoute<void>(
+                              settings: const RouteSettings(
+                                name: AppRoutes.activityPlace,
+                              ),
                               builder: (_) => Step3PlaceScreen(
                                 friends: widget.friends,
                                 categories: _viewModel.selectedCategories,

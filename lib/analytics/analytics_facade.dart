@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter/widgets.dart';
+import 'analytics_screen_catalog.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -27,6 +27,8 @@ class AnalyticsFacade {
   SharedPreferences? _preferences;
   String? _userId;
   String? _currentScreen;
+  String _currentDashboardTab = AnalyticsScreenCatalog.home;
+  String get currentDashboardTab => _currentDashboardTab;
   String _sessionId = '';
   bool _isFlushing = false;
 
@@ -53,9 +55,12 @@ class AnalyticsFacade {
   }
 
   // Funciones te tracking relacionadas a las BQ trackeamos screen, features y loading times
-
   Future<void> trackScreenView({ required String screen,}) async {
     _currentScreen = screen;
+
+    if (AnalyticsScreenCatalog.dashboardTabs.contains(screen)) {
+      _currentDashboardTab = screen;
+    }
 
     await _trackEvent('screen_view', {'screen': screen,});
   }
@@ -231,37 +236,5 @@ class AnalyticsFacade {
       unawaited(instance.recordCrash(error: error));
       return handled;
     };
-  }
-}
-
-class AnalyticsNavigatorObserver extends NavigatorObserver {
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    _track(route);
-    super.didPush(route, previousRoute);
-  }
-
-  @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    if (newRoute != null) _track(newRoute);
-    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
-  }
-
-  void _track(Route<dynamic> route) {
-    final name = route.settings.name;
-    final screen = name == null || name == '/'
-        ? 'Home'
-        : switch (name) {
-            '/activity-detail' => 'ActivityDetail',
-            '/activity/create' || '/activity-created' => 'ActivityDetail',
-            '/login' => 'Login',
-            '/register' => 'Register',
-            _ => null,
-          };
-    if (screen != null) {
-      unawaited(
-        AnalyticsFacade.instance.trackScreenView(screen: screen,)
-      );
-    }
   }
 }

@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../widgets/step_header.dart';
 import 'step2_type_screen.dart';
 import '../viewmodels/friends_view_model.dart';
+import '../navigation/app_routes.dart';
 
 class Step1InviteScreen extends StatefulWidget {
   const Step1InviteScreen({super.key});
@@ -168,8 +169,13 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
                             : () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => Step2TypeScreen(friends: _viewModel.selectedFriends),
+                            MaterialPageRoute<void>(
+                              settings: const RouteSettings(
+                                name: AppRoutes.activityType,
+                              ),
+                              builder: (_) => Step2TypeScreen(
+                                friends: _viewModel.selectedFriends
+                                ),
                             ),
                           );
                         },

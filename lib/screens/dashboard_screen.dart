@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-import '../services/analytics_facade.dart';
+import '../analytics/analytics_facade.dart';
+import '../analytics/analytics_screen_catalog.dart';
+
+import '../navigation/app_routes.dart';
+
 import '../widgets/app_bottom_nav.dart';
 import 'activities_screen.dart';
 import 'friends_screen.dart';
@@ -20,13 +24,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _viewModel = DashboardViewModel();
 
   void _onDestinationSelected(int index) {
+    if (index == _viewModel.selectedIndex) return;
+
     _viewModel.selectTab(index);
-    
-    const screens = ['Home', 'FriendAvailability', 'Activities', 'Profile'];
+
+    final screen = AnalyticsScreenCatalog.dashboardTabs[index];
     
     unawaited(
       AnalyticsFacade.instance.trackScreenView(
-        screen: screens[index],
+        screen: screen,
       ),
     );
   }
@@ -41,11 +47,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final screens = <Widget>[
       HomeScreen(
-        onOpenFlow: () => Navigator.pushNamed(context, '/activity/create'),
+        onOpenFlow: () => Navigator.pushNamed(context, AppRoutes.createActivity),
       ),
       const FriendsScreen(),
       ActivitiesScreen(
-        onOpenDetail: () => Navigator.pushNamed(context, '/activity-detail'),
+        onOpenDetail: () => Navigator.pushNamed(context, AppRoutes.activityDetail),
       ),
       const ProfileScreen(),
     ];

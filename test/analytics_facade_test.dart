@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:llamalla/services/analytics_facade.dart';
+import 'package:llamalla/analytics/analytics_facade.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
