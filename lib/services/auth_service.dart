@@ -19,6 +19,8 @@ class AuthService {
 
   final http.Client _client;
   final String _baseUrl;
+  static Future<void>? _googleInitialization;
+  static GoogleSignInAccount? _googleAccount;
 
   Future<RegistrationResult> register({
     required String name,
@@ -55,20 +57,30 @@ class AuthService {
     return result;
   }
 
+
+  // Hace auth para el uso de google calendar y manda el token de identidad al back
   Future<AuthResult> loginWithGoogle() async {
-    await GoogleSignIn.instance.initialize(
-      serverClientId: (_env('GOOGLE_SERVER_CLIENT_ID') ?? '').isEmpty
-          ? null
-          : _env('GOOGLE_SERVER_CLIENT_ID'),
-    );
-    final account = await GoogleSignIn.instance.authenticate();
+    try {
+    final account = await googleAccountForCalendar();
+
     final idToken = account.authentication.idToken;
+
     if (idToken == null || idToken.isEmpty) {
       throw const AuthException(
         message: 'Google no devolvió un token de identidad.',
       );
     }
-    return exchangeGoogleIdToken(idToken);
+
+    return await exchangeGoogleIdToken(idToken);
+    } on GoogleSignInException catch (error) {
+    debugPrint(
+      '[GOOGLE][LOGIN] ${error.code} - ${error.description}',
+    );
+
+    throw AuthException(
+      message: error.description ?? 'No fue posible iniciar sesión con Google.',
+    );
+    }
   }
 
   Future<AuthResult> exchangeGoogleIdToken(String idToken) async {
@@ -146,6 +158,19 @@ class AuthService {
       }
     } finally {
       await clearSession();
+
+      //Cerramos aca la sesion que se tiene con google si esta activa
+      try {
+        await initializeGoogleSignIn();
+        await GoogleSignIn.instance.signOut();
+
+        _googleAccount = null;
+
+        debugPrint('[GOOGLE][SIGNOUT] Sesion de google del usuario cerrada');
+      } catch (error, stackTrace){
+        debugPrint('[GOOGLE][SIGNOUT][ERROR] $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
     }
   }
 
@@ -307,6 +332,74 @@ class AuthService {
     } on FormatException {
       return <String, dynamic>{};
     }
+  }
+
+  // Intenta recuperar una sesion existente de lo contrario inicia el proceso de auth
+
+  Future<void> initializeGoogleSignIn() async {
+    final pendingInitialization = _googleInitialization;
+
+    if (pendingInitialization != null) {
+      await pendingInitialization;
+      return;
+    }
+
+    final serverClientId = (_env('GOOGLE_SERVER_CLIENT_ID') ?? '').trim();
+
+    if (serverClientId.isEmpty) {
+      debugPrint(
+        '[GOOGLE][CONFIG] GOOGLE_SERVER_CLIENT_ID está vacío. '
+        'Comprueba también si google-services.json contiene '
+        'un cliente OAuth web.',
+      );
+    }
+
+    final initialization = GoogleSignIn.instance.initialize(
+      serverClientId: serverClientId.isEmpty ? null : serverClientId,
+    );
+
+    _googleInitialization = initialization;
+
+    try {
+      await initialization;
+      debugPrint('[GOOGLE][INIT] Inicialización completada');
+    } catch (_) {
+      _googleInitialization = null;
+      rethrow;
+    }
+  }
+
+  Future<GoogleSignInAccount> googleAccountForCalendar() async {
+    await initializeGoogleSignIn();
+
+    if (_googleAccount != null) {
+      debugPrint('[GOOGLE][ACCOUNT] Usando la cuenta guardada');
+      return _googleAccount!;
+    }
+
+    final google = GoogleSignIn.instance;
+    GoogleSignInAccount? account;
+
+    try {
+      debugPrint('[GOOGLE][ACCOUNT] Intentando recuperar sesión existente');
+      account = await google.attemptLightweightAuthentication();
+    } on GoogleSignInException catch (error) {
+      debugPrint(
+        '[GOOGLE][ACCOUNT] No se pudo recuperar la sesión: '
+        '${error.code} - ${error.description}',
+      );
+    }
+
+    if (account == null) {
+      debugPrint('[GOOGLE][ACCOUNT] Solicitando autenticación interactiva');
+      account = await google.authenticate();
+    }
+
+    _googleAccount = account;
+
+    debugPrint('[GOOGLE][ACCOUNT] Cuenta disponible: ${account.email}');
+
+    return account;
   }
 }
 

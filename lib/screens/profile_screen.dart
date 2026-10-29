@@ -135,71 +135,197 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _isLoading = true;
       _errorMessage = null;
     });
+
     try {
+      debugPrint('[PROFILE][1] Cargando perfil');
+
       final profile = await _profileViewModel.load();
+
       if (profile == null) {
         throw ProfileException(
-          _profileViewModel.errorMessage ?? 'No pudimos cargar tu perfil.',
+          _profileViewModel.errorMessage ??
+              'No pudimos cargar tu perfil.',
         );
       }
-      await _loadSchedule();
+
+      await _loadSchedule(); //Cargamos el calendario que tenga el usuario.
+
       if (!mounted) return;
+
       setState(() {
         _profile = profile;
         _isLoading = false;
       });
-    } on ProfileException catch (error) {
+
+      debugPrint('[PROFILE][2] Perfil cargado');
+    } on ProfileException catch (error) { //Profile error
       if (!mounted) return;
+
       setState(() {
         _isLoading = false;
         _errorMessage = error.message;
+      });
+
+      debugPrint('[PROFILE][ERROR] ${error.message}');
+    } catch (error, stackTrace) { //Catch errores generales
+      debugPrint('[PROFILE][ERROR][INESPERADO] $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'No pudimos cargar los datos del perfil.';
       });
     }
   }
 
   Future<void> _loadSchedule() async {
+    debugPrint('[SCHEDULE][1] Consultando estado de Google');
+
     try {
       final status = await _scheduleService.getGoogleStatus();
       _googleConnected = status.connected;
-    } on ScheduleException {
+
+      debugPrint(
+        '[SCHEDULE][2] Estado de Google: $_googleConnected',
+      );
+    } catch (error, stackTrace) {
       _googleConnected = false;
+
+      debugPrint('[SCHEDULE][ERROR][STATUS] $error');
+      debugPrintStack(stackTrace: stackTrace);
     }
 
     final gaps = <DayGaps>[];
+
     for (final date in _weekdays) {
+      debugPrint('[SCHEDULE] Consultando $date');
+
       try {
-        gaps.add(await _scheduleService.getGaps(date: date));
-      } on ScheduleException {
-        // An unavailable schedule is rendered as an empty state.
+        final result = await _scheduleService.getGaps(date: date);
+        gaps.add(result);
+
+        debugPrint('[SCHEDULE] Horario cargado: $date');
+      } catch (error, stackTrace) {
+        debugPrint('[SCHEDULE][ERROR][GAPS] Fecha: $date');
+        debugPrint('Error: $error');
+        debugPrintStack(stackTrace: stackTrace);
       }
     }
+
     _weekGaps = gaps;
+
+    debugPrint(
+      '[SCHEDULE][FINAL] Días cargados: '
+      '${gaps.length}/${_weekdays.length}',
+    );
   }
 
   Future<void> _connectCalendar() async {
+    debugPrint('[CALENDAR][1] Inicio de conexión');
+
+    if (_isSyncing) return; //Si ya esta en proceso se ignora
+
     setState(() => _isSyncing = true);
+
     try {
-      final authorization = await GoogleSignIn.instance.authorizationClient
-          .authorizeServer(const [
-            'https://www.googleapis.com/auth/calendar.readonly',
-          ]);
+      debugPrint('[CALENDAR][2] Obteniendo cuenta de Google');
+
+      final account = await _authService.googleAccountForCalendar();
+
+      const scopes = [
+        'https://www.googleapis.com/auth/calendar.readonly',
+      ];
+
+      debugPrint('[CALENDAR][3] Solicitando permisos de Calendar');
+
+      final authorization = await account.authorizationClient
+          .authorizeServer(scopes);
+
       final authCode = authorization?.serverAuthCode;
+
       if (authCode == null || authCode.isEmpty) {
         throw const ScheduleException(
-          'Google no devolvió un código de autorización.',
+          'Google no devolvió un código de autorización del servidor. '
+          'Comprueba el Client ID OAuth web y la configuración de Google.',
         );
       }
-      await _scheduleService.syncGoogle(authCode: authCode);
+
+    // El authcode no se imprime por consola por temas de seguridad
+      debugPrint('[CALENDAR][4] Código recibido; enviando al backend');
+
+      final result = await _scheduleService.syncGoogle(
+        authCode: authCode,
+      );
+
+      debugPrint('[CALENDAR][5] Sincronización aceptada por el backend');
+      debugPrint('[CALENDAR][5] Resultado: $result');
+
       await _loadSchedule();
-      if (mounted) Navigator.pop(context);
-    } on ScheduleException catch (error) {
+
+      debugPrint('[CALENDAR][6] Horarios actualizados');
+
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+        Navigator.pop(context);
+      }
+    } on GoogleSignInException catch (error, stackTrace) { //Catch de error por SignIn
+    debugPrint('[CALENDAR][ERROR][GOOGLE]');
+    debugPrint('Código: ${error.code}');
+    debugPrint('Descripción: ${error.description}');
+    debugPrintStack(stackTrace: stackTrace);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Error de Google: ${error.description ?? error.code.name}',
+          ),
+        ),
+      );
+    }
+    } on ScheduleException catch (error, stackTrace) { //Catch de error Schedule
+      debugPrint('[CALENDAR][ERROR][SCHEDULE]');
+      debugPrint('HTTP: ${error.statusCode}');
+      debugPrint('Mensaje: ${error.message}');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+    } on AuthException catch (error, stackTrace) { //Catch de error de auth
+      debugPrint('[CALENDAR][ERROR][AUTH]');
+      debugPrint('HTTP: ${error.statusCode}');
+      debugPrint('Mensaje: ${error.message}');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+    } catch (error, stackTrace) { //Catch de otros errores
+      debugPrint('[CALENDAR][ERROR][INESPERADO] $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Falló la conexión con Google Calendar. '
+              'Revisa los registros de depuración.',
+            ),
+          ),
+        );
       }
     } finally {
-      if (mounted) setState(() => _isSyncing = false);
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+
+      debugPrint('[CALENDAR] Fin del proceso de conexión');
     }
   }
 
@@ -222,37 +348,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _refreshCalendar() async {
+    debugPrint('[CALENDAR][REFRESH][1] Inicio');
+
+    if (_isSyncing) return; //Evita reintentos si ya se esta procesando
+
     setState(() => _isSyncing = true);
+
     try {
-      await _scheduleService.refreshGoogle();
-      await _loadSchedule();
-      if (mounted) Navigator.pop(context);
-    } on ScheduleException catch (error) {
+      debugPrint('[CALENDAR][REFRESH][2] Solicitando actualización');
+
+      final result = await _scheduleService.refreshGoogle(); //Mira si hay cambios nuevos que actualizar
+
+      debugPrint('[CALENDAR][REFRESH][3] Actualización exitosa');
+      debugPrint('[CALENDAR][REFRESH][3] Resultado: $result');
+
+      await _loadSchedule(); //Carga los cambios nuevos
+
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+        Navigator.pop(context);
+      }
+    } on ScheduleException catch (error, stackTrace) {
+      debugPrint(
+        '[CALENDAR][REFRESH][ERROR] '
+        'HTTP ${error.statusCode}: ${error.message}',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+    } on AuthException catch (error, stackTrace) {
+      debugPrint('[CALENDAR][REFRESH][AUTH] ${error.message}');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('[CALENDAR][REFRESH][INESPERADO] $error');
+      debugPrintStack(stackTrace: stackTrace);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No fue posible actualizar Google Calendar.'),
+          ),
+        );
       }
     } finally {
-      if (mounted) setState(() => _isSyncing = false);
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
     }
   }
 
   void _openCalendarSync() {
+    debugPrint('[CALENDAR][SHEET][1] Abriendo panel');
+    debugPrint('[CALENDAR][SHEET] Conectado: $_googleConnected');
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(24),
+        ),
       ),
-      builder: (_) => _CalendarSyncSheet(
-        connected: _googleConnected,
-        isLoading: _isSyncing,
-        onConnect: _connectCalendar,
-        onRefresh: _refreshCalendar,
-      ),
-    );
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return _CalendarSyncSheet(
+              connected: _googleConnected,
+              isLoading: _isSyncing,
+              onConnect: () async {
+                debugPrint('[CALENDAR][SHEET] Pulsado conectar');
+
+                final operation = _connectCalendar();
+                setSheetState(() {});
+
+                await operation;
+
+                if (sheetContext.mounted) {
+                  setSheetState(() {});
+                }
+              },
+              onRefresh: () async {
+                debugPrint('[CALENDAR][SHEET] Pulsado actualizar');
+
+                final operation = _refreshCalendar();
+                setSheetState(() {});
+
+                await operation;
+
+                if (sheetContext.mounted) {
+                  setSheetState(() {});
+                }
+              },
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      debugPrint('[CALENDAR][SHEET][FINAL] Panel cerrado');
+    });
   }
 
   @override
