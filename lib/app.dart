@@ -36,6 +36,8 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
           authSession.isAuthenticated == true
               ? AnalyticsScreenCatalog.home
               : AnalyticsScreenCatalog.login,
+          onScreenView: (screen) => AnalyticsFacade.instance.trackScreenView(screen: screen,),
+          currentDashboardTabResolver: () => AnalyticsFacade.instance.currentDashboardTab,
       );
 
   @override

@@ -3,17 +3,18 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../navigation/app_routes.dart';
-import 'analytics_facade.dart';
 import 'analytics_screen_catalog.dart';
 
 class AnalyticsNavigatorObserver extends NavigatorObserver {
   AnalyticsNavigatorObserver({
     required this.initialScreenResolver,
-    AnalyticsFacade? facade,
-  }) : _facade = facade ?? AnalyticsFacade.instance;
+    required this.onScreenView,
+    required this.currentDashboardTabResolver,
+  });
 
   final String Function() initialScreenResolver;
-  final AnalyticsFacade _facade;
+  final Future<void> Function(String screen) onScreenView;
+  final String Function() currentDashboardTabResolver;
 
   final Map<Route<dynamic>, String> _routeScreens =
       Map<Route<dynamic>, String>.identity();
@@ -59,13 +60,11 @@ class AnalyticsNavigatorObserver extends NavigatorObserver {
       final visibleScreen =
           previousRoute.settings.name == AppRoutes.home &&
               previousScreen == AnalyticsScreenCatalog.home
-          ? _facade.currentDashboardTab
+          ? currentDashboardTabResolver()
           : previousScreen;
 
       if (visibleScreen != null) {
-        unawaited(
-          _facade.trackScreenView(screen: visibleScreen),
-        );
+        unawaited(onScreenView(visibleScreen),);
       }
     }
 
@@ -90,8 +89,6 @@ class AnalyticsNavigatorObserver extends NavigatorObserver {
     // Guarda la ruta y su pantalla
     _routeScreens[route] = screen;
 
-    unawaited(
-      _facade.trackScreenView(screen: screen),
-    );
+    unawaited(onScreenView(screen),);
   }
 }
