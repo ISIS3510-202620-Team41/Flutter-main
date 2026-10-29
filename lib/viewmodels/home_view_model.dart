@@ -31,8 +31,6 @@ class HomeViewModel extends ChangeNotifier {
   final AnalyticsFacade _analyticsFacade;
   final DateTime Function() _now;
 
-  bool _recommendationsViewTracked = false; //Evita registrar continuamente el acceso
-
   UserProfile? profile;
   FreeInterval? nextFreeInterval;
   bool isLoading = true;
@@ -99,17 +97,6 @@ class HomeViewModel extends ChangeNotifier {
       recommendationId = batch.recommendationId;
       recommendationFreeMinutes = batch.freeMinutes;
 
-      if (! _recommendationsViewTracked) {
-        try {
-          await _analyticsFacade.trackFeatureUsed(
-            feature: AnalyticsFeatureCatalog.activityRecommendations,
-            action: AnalyticsFeatureCatalog.viewRecommendationsAction,
-            screen: AnalyticsFeatureCatalog.activityRecommendationsScreen,
-          );
-        } catch (_) {
-        }
-      }
-
     } on ActivityException catch (error) {
       recommendations = const [];
       recommendationsError = error.message;
@@ -124,6 +111,15 @@ class HomeViewModel extends ChangeNotifier {
     if (id == null) return false;
     actionMessage = null;
     try {
+      try {
+        await _analyticsFacade.trackFeatureUsed(
+          feature: AnalyticsFeatureCatalog.activityRecommendations,
+          action: AnalyticsFeatureCatalog.selectRecommendationAction,
+          screen: AnalyticsFeatureCatalog.activityRecommendationsScreen,
+        );
+      } catch (_) {
+      }
+      
       await _activityService.join(
         id,
         recommendationId: recommendationId,

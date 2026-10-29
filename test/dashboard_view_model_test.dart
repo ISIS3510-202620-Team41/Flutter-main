@@ -13,6 +13,20 @@ class RecordingAnalyticsFacade extends AnalyticsFacade {
         );
 
   final List<String> screenViews = [];
+  final List<Map<String, String?>> featureEvents = [];
+
+  @override
+  Future<void> trackFeatureUsed({
+    required String feature,
+    String? action,
+    String? screen,
+  }) async {
+    featureEvents.add({
+      'feature': feature,
+      'action': action,
+      'screen': screen,
+    });
+  }
 
   @override
   Future<void> trackScreenView({
@@ -47,6 +61,16 @@ void main() {
         analytics.screenViews,
         ['FriendAvailability'],
       );
+      expect(
+        analytics.featureEvents,
+        [
+          {
+            'feature': 'friend_availability',
+            'action': 'view_availability',
+            'screen': 'FriendAvailability',
+          },
+        ],
+      );
     });
 
     test('does not track the same tab twice', () {
@@ -57,6 +81,16 @@ void main() {
       expect(
         analytics.screenViews,
         ['FriendAvailability'],
+      );
+      expect(
+        analytics.featureEvents,
+        [
+          {
+            'feature': 'friend_availability',
+            'action': 'view_availability',
+            'screen': 'FriendAvailability',
+          },
+        ],
       );
     });
 
@@ -73,6 +107,14 @@ void main() {
           'Profile',
         ],
       );
+      expect(
+        analytics.featureEvents,
+        hasLength(1),
+      );
+      expect(
+        analytics.featureEvents.single['feature'],
+        'friend_availability',
+      );
     });
 
     test('does not track invalid tab indices', () {
@@ -81,6 +123,7 @@ void main() {
 
       expect(viewModel.selectedIndex, 0);
       expect(analytics.screenViews, isEmpty);
+      expect(analytics.featureEvents, isEmpty);
     });
 
     test('does not track the initial tab when selected again', () {
@@ -88,6 +131,7 @@ void main() {
 
       expect(viewModel.selectedIndex, 0);
       expect(analytics.screenViews, isEmpty);
+      expect(analytics.featureEvents, isEmpty);
     });
   });
 }

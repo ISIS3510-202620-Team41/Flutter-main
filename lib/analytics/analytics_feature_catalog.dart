@@ -7,10 +7,9 @@ class AnalyticsFeatureCatalog {
   static const activityJoining = 'activity_joining';
 
   // Acciones dentro de las features
-  static const viewRecommendationsAction = 'view_recommendations';
+  static const selectRecommendationAction = 'select_recommendation';
   static const viewAvailabilityAction = 'view_availability';
-  static const joinRecommendedActivityAction =
-      'join_recommended_activity';
+  static const joinRecommendedActivityAction ='join_recommended_activity';
 
   // Screens donde las features se cargan
   static const activityRecommendationsScreen =
