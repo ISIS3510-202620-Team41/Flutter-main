@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
+import 'analytics_ingestion_service.dart';
+import 'http_analytics_ingestion_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'analytics_screen_catalog.dart';
@@ -15,17 +16,14 @@ class AnalyticsFacade {
   AnalyticsFacade({
     http.Client? client,
     AnalyticsEventQueue? eventQueue,
-    }) : _client = client ?? http.Client(),
+    AnalyticsIngestionService? ingestionService,
+    }) : _ingestionService = ingestionService ?? HttpAnalyticsIngestionService(client: client),
          _eventQueue = eventQueue ?? SharedPreferencesAnalyticsEventQueue(),
          _uuid = const Uuid();
 
   static final instance = AnalyticsFacade();
 
-  static String get _baseUrl =>
-      _env('ANALYTICS_BASE_URL') ?? 'http://10.0.2.2:8000';
-  static String get _ingestKey => _env('ANALYTICS_INGEST_KEY') ?? '';
-
-  final http.Client _client;
+  final AnalyticsIngestionService _ingestionService;
   final Uuid _uuid;
   final AnalyticsEventQueue _eventQueue;
   bool _isInitialized = false;
@@ -125,35 +123,17 @@ class AnalyticsFacade {
       
       if (events.isEmpty) return;
 
-      final response = await _client.post(
-        Uri.parse('$_baseUrl/events/batch'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (_ingestKey.isNotEmpty) 'X-API-Key': _ingestKey,
-        },
-        body: jsonEncode({
-          'events': events.map((event) => {...event, 'userId': userId}).toList(),
-        }),
-      ).timeout(const Duration(seconds: 2));
+      final result = await _ingestionService.sendBatch(
+        events: events, 
+        userId: userId
+      );
 
-      int statusCode = response.statusCode;
+      if (result == AnalyticsIngestionResult.accepted ||
+          result == AnalyticsIngestionResult.discarded) {
+            final eventIds = events.map((event) => event['eventId']).whereType<String>().toSet();
 
-      if (statusCode == 201 || statusCode == 401 || statusCode == 422) {
-        final discardedIds = events.map((event) => event['eventId']).whereType<String>().toSet();
-
-        await _eventQueue.removeEventsById(discardedIds);
-
-      } if (statusCode !=201) {
-        debugPrint('Analytics batch discarded with HTPP ''$statusCode.',);
-      } else if (statusCode >= 500) {
-        debugPrint('Analytics engine unavailable; retaining event queue.',);
-      } else {
-        debugPrint( 'Analytics batch failed with unexpected HTTP ''$statusCode; retaining event queue.',);
+          await _eventQueue.removeEventsById(eventIds);
       }
-    } on SocketException catch (error) {
-      debugPrint('Analytics network error: $error');
-    } on TimeoutException catch (error) {
-      debugPrint('Analytics request timed out: $error');
     } finally {
       _isFlushing = false;
     }
