@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'analytics_service.dart';
+import '../analytics/analytics_facade.dart';
 
 final authSession = AuthSession();
 
@@ -178,7 +178,7 @@ class AuthService {
     final preferences = await SharedPreferences.getInstance();
     await preferences.remove('access_token');
     await preferences.remove('refresh_token');
-    AnalyticsService.instance.setUserId(null);
+    AnalyticsFacade.instance.setUserId(null);
   }
 
   Future<http.Response> authenticatedRequest({
@@ -292,8 +292,8 @@ class AuthService {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString('access_token', result.accessToken);
     await preferences.setString('refresh_token', result.refreshToken);
-    AnalyticsService.instance.setUserId(
-      AnalyticsService.instance.decodeUserId(result.accessToken),
+    AnalyticsFacade.instance.setUserId(
+      AnalyticsFacade.instance.decodeUserId(result.accessToken),
     );
   }
 

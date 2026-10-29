@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'services/analytics_service.dart';
+
+import 'analytics/analytics_facade.dart';
+import 'analytics/analytics_navigator_observer.dart';
+import 'analytics/analytics_screen_catalog.dart';
+
+import 'navigation/app_routes.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/activity_detail_screen.dart';
@@ -11,15 +16,6 @@ import 'screens/step1_invite_screen.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 
-class AppRoutes {
-  static const login = '/login';
-  static const register = '/register';
-  static const home = '/';
-  static const createActivity = '/activity/create';
-  static const activityDetail = '/activity-detail';
-  static const activityCreated = '/activity-created'; //Confirmation screen
-}
-
 class LlamallaApp extends StatefulWidget {
   const LlamallaApp({super.key});
 
@@ -27,13 +23,22 @@ class LlamallaApp extends StatefulWidget {
   State<LlamallaApp> createState() => _LlamallaAppState();
 }
 
-class _LlamallaAppState extends State<LlamallaApp>
-    with WidgetsBindingObserver {
+class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late final Future<bool> _sessionFuture = _restoreSession();
   final _startupStopwatch = Stopwatch()..start();
   late final Timer _analyticsTimer;
   bool _startupTracked = false;
+
+  late final AnalyticsNavigatorObserver _analyticsObserver =
+    AnalyticsNavigatorObserver(
+      initialScreenResolver: () => 
+          authSession.isAuthenticated == true
+              ? AnalyticsScreenCatalog.home
+              : AnalyticsScreenCatalog.login,
+          onScreenView: (screen) => AnalyticsFacade.instance.trackScreenView(screen: screen,),
+          currentDashboardTabResolver: () => AnalyticsFacade.instance.currentDashboardTab,
+      );
 
   @override
   void initState() {
@@ -42,7 +47,7 @@ class _LlamallaAppState extends State<LlamallaApp>
     authSession.addListener(_onAuthChanged);
     _analyticsTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => unawaited(AnalyticsService.instance.flush()),
+      (_) => unawaited(AnalyticsFacade.instance.flush()),
     );
   }
 
@@ -58,18 +63,20 @@ class _LlamallaAppState extends State<LlamallaApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      unawaited(AnalyticsService.instance.flush());
+      unawaited(AnalyticsFacade.instance.flush());
     }
   }
 
   void _trackStartup() {
     if (_startupTracked) return;
+
     _startupTracked = true;
+
     unawaited(
-      AnalyticsService.instance.track('app_loading_time', {
-        'loadType': 'cold_start',
-        'durationMs': _startupStopwatch.elapsedMilliseconds,
-      }),
+      AnalyticsFacade.instance.trackAppLoadingTime(
+        loadType: "cold_start",
+        duration: _startupStopwatch.elapsed,
+      ),
     );
   }
 
@@ -111,7 +118,7 @@ class _LlamallaAppState extends State<LlamallaApp>
             title: 'Llamalla',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
-            navigatorObservers: [AnalyticsNavigatorObserver()],
+            navigatorObservers: [_analyticsObserver],
             builder: (context, child) {
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => _trackStartup(),
@@ -131,31 +138,39 @@ class _LlamallaAppState extends State<LlamallaApp>
               if (protectedRoutes.contains(settings.name) &&
                   authSession.isAuthenticated != true) {
                 return MaterialPageRoute<void>(
-                  settings: settings,
+                  settings: const RouteSettings(name: AppRoutes.login),
                   builder: (_) => const LoginScreen(),
                 );
               }
               switch (settings.name) {
                 case AppRoutes.home:
-                  return MaterialPageRoute(
+                  return MaterialPageRoute<void>(
+                    settings: settings,
                     builder: (_) => const DashboardScreen(),
                   );
                 case AppRoutes.login:
-                  return MaterialPageRoute(builder: (_) => const LoginScreen());
+                  return MaterialPageRoute<void>(
+                    settings: settings,
+                    builder: (_) => const LoginScreen(),
+                    );
                 case AppRoutes.register:
-                  return MaterialPageRoute(
+                  return MaterialPageRoute<void>(
+                    settings: settings,
                     builder: (_) => const RegisterScreen(),
                   );
                 case AppRoutes.createActivity:
-                  return MaterialPageRoute(
+                  return MaterialPageRoute<void>(
+                    settings: settings,
                     builder: (_) => const Step1InviteScreen(),
                   );
                 case AppRoutes.activityCreated:
-                  return MaterialPageRoute(
+                  return MaterialPageRoute<void>(
+                    settings: settings,
                     builder: (_) => const ActivityCreatedScreen(),
                   );
                 case AppRoutes.activityDetail:
-                  return MaterialPageRoute(
+                  return MaterialPageRoute<void>(
+                    settings: settings,
                     builder: (_) => const ActivityDetailScreen(),
                   );
                 default:
