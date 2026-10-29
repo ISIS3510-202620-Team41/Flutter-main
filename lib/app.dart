@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'services/analytics_service.dart';
+import 'services/analytics_facade.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/activity_detail_screen.dart';
@@ -42,7 +42,7 @@ class _LlamallaAppState extends State<LlamallaApp>
     authSession.addListener(_onAuthChanged);
     _analyticsTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => unawaited(AnalyticsService.instance.flush()),
+      (_) => unawaited(AnalyticsFacade.instance.flush()),
     );
   }
 
@@ -58,18 +58,20 @@ class _LlamallaAppState extends State<LlamallaApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      unawaited(AnalyticsService.instance.flush());
+      unawaited(AnalyticsFacade.instance.flush());
     }
   }
 
   void _trackStartup() {
     if (_startupTracked) return;
+
     _startupTracked = true;
+
     unawaited(
-      AnalyticsService.instance.track('app_loading_time', {
-        'loadType': 'cold_start',
-        'durationMs': _startupStopwatch.elapsedMilliseconds,
-      }),
+      AnalyticsFacade.instance.trackAppLoadingTime(
+        loadType: "cold_start",
+        duration: _startupStopwatch.elapsed,
+      ),
     );
   }
 

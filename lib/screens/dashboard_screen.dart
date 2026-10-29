@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-import '../services/analytics_service.dart';
+import '../services/analytics_facade.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'activities_screen.dart';
 import 'friends_screen.dart';
@@ -21,13 +21,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onDestinationSelected(int index) {
     _viewModel.selectTab(index);
+    
     const screens = ['Home', 'FriendAvailability', 'Activities', 'Profile'];
+    
     unawaited(
-      AnalyticsService.instance.track('screen_view', {
-        'screen': screens[index],
-      }),
+      AnalyticsFacade.instance.trackScreenView(
+        screen: screens[index],
+      ),
     );
-    AnalyticsService.instance.setCurrentScreen(screens[index]);
   }
 
   @override

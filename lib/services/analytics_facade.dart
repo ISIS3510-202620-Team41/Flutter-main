@@ -9,12 +9,12 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-class AnalyticsService {
-  AnalyticsService({http.Client? client})
+class AnalyticsFacade {
+  AnalyticsFacade({http.Client? client})
     : _client = client ?? http.Client(),
       _uuid = const Uuid();
 
-  static final instance = AnalyticsService();
+  static final instance = AnalyticsFacade();
 
   static const _queueKey = 'analytics_event_queue';
   static const _crashKey = 'analytics_pending_crashes';
@@ -38,7 +38,7 @@ class AnalyticsService {
       try {
         final crash = jsonDecode(encoded);
         if (crash is Map<String, dynamic>) {
-          await track('crash', crash);
+          await _trackEvent('crash', crash);
         }
       } on FormatException {
         debugPrint('Discarding malformed persisted crash event.');
@@ -52,16 +52,34 @@ class AnalyticsService {
     if (userId != null) unawaited(flush());
   }
 
-  void setCurrentScreen(String? screen) {
+  // Funciones te tracking relacionadas a las BQ trackeamos screen, features y loading times
+
+  Future<void> trackScreenView({ required String screen,}) async {
     _currentScreen = screen;
+
+    await _trackEvent('screen_view', {'screen': screen,});
   }
 
-  Future<void> track(
-    String eventType, [
-    Map<String, dynamic> fields = const {},
-  ]) async {
+  Future<void> trackFeatureUsed({required String feature, String? action, String? screen,}) {
+  return _trackEvent('feature_used', {
+    'feature': feature,
+    'action': ?action,
+    'screen': ?screen,
+    });
+  }
+
+  Future<void> trackAppLoadingTime({ required String loadType, required Duration duration,}) {
+  return _trackEvent('app_loading_time', {
+    'loadType': loadType,
+    'durationMs': duration.inMilliseconds,
+    });
+  }
+
+  Future<void> _trackEvent(String eventType, [Map<String, dynamic> fields = const {},]) async {
     final preferences = _preferences;
     if (preferences == null) return;
+
+    // Se agregan campos comunes a todos los eventos mas los adicionales especificos
     final event = <String, dynamic>{
       'eventType': eventType,
       'eventId': _uuid.v4(),
@@ -69,8 +87,10 @@ class AnalyticsService {
       'timestamp': DateTime.now().toUtc().toIso8601String(),
       ...fields,
     };
+
     final appVersion = _env('APP_VERSION') ?? '1.0.0';
     event['appVersion'] = appVersion;
+
     await _saveEvent(event);
   }
 
@@ -239,9 +259,8 @@ class AnalyticsNavigatorObserver extends NavigatorObserver {
             _ => null,
           };
     if (screen != null) {
-      AnalyticsService.instance.setCurrentScreen(screen);
       unawaited(
-        AnalyticsService.instance.track('screen_view', {'screen': screen}),
+        AnalyticsFacade.instance.trackScreenView(screen: screen,)
       );
     }
   }
