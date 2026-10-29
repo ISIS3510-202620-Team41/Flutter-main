@@ -1,8 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
-
-import '../analytics/analytics_facade.dart';
-import '../analytics/analytics_screen_catalog.dart';
 
 import '../navigation/app_routes.dart';
 
@@ -24,17 +20,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _viewModel = DashboardViewModel();
 
   void _onDestinationSelected(int index) {
-    if (index == _viewModel.selectedIndex) return;
-
     _viewModel.selectTab(index);
-
-    final screen = AnalyticsScreenCatalog.dashboardTabs[index];
-    
-    unawaited(
-      AnalyticsFacade.instance.trackScreenView(
-        screen: screen,
-      ),
-    );
   }
 
   @override
