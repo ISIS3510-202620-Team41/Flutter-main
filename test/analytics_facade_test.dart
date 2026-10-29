@@ -152,4 +152,198 @@ void main() {
     expect(crash['component'], 'ProfileScreen');
     expect(crash['exceptionType'], 'StateError');
   });
+
+  for (final statusCode in <int>[401, 422]) {
+    test('discards events when the engine returns HTTP $statusCode', () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final client = MockClient(
+          (_) async => http.Response('{}', statusCode),
+        );
+      final facade = AnalyticsFacade(client: client);
+
+      await facade.initialize();
+      facade.setUserId('user-uuid');
+
+      await facade.trackScreenView(screen: 'Home');
+      await facade.flush();
+
+      final preferences = await SharedPreferences.getInstance();
+
+      expect(preferences.getStringList('analytics_event_queue'), isEmpty,);
+      },);
+  }
+
+  test('retains events on an unexpected HTTP error', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    final client = MockClient(
+      (_) async => http.Response('{}', 400),
+    );
+    final facade = AnalyticsFacade(client: client);
+
+    await facade.initialize();
+    facade.setUserId('user-uuid');
+
+    await facade.trackScreenView(screen: 'Home');
+    await facade.flush();
+
+    final preferences = await SharedPreferences.getInstance();
+
+    expect(
+      preferences.getStringList('analytics_event_queue'),
+      hasLength(1),
+    );
+  });
+
+  test('sends retained events when the engine recovers', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    final responses = <int>[503, 201];
+    var requestCount = 0;
+
+    final client = MockClient((_) async {
+      final statusCode = responses[requestCount];
+      requestCount++;
+
+      return http.Response('{}', statusCode);
+    });
+
+    final facade = AnalyticsFacade(client: client);
+
+    await facade.initialize();
+    facade.setUserId('user-uuid');
+
+    await facade.trackScreenView(screen: 'Home');
+
+    await facade.flush();
+
+    var preferences = await SharedPreferences.getInstance();
+    expect(
+      preferences.getStringList('analytics_event_queue'),
+      hasLength(1),
+    );
+
+    await facade.flush();
+
+    preferences = await SharedPreferences.getInstance();
+
+    expect(requestCount, 2);
+    expect(
+      preferences.getStringList('analytics_event_queue'),
+      isEmpty,
+    );
+  });
+
+  test('sends no more than 200 events per batch', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    final batchSizes = <int>[];
+
+    final client = MockClient((request) async {
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      final events = body['events'] as List;
+
+      batchSizes.add(events.length);
+
+      return http.Response('{}', 201);
+    });
+
+    final facade = AnalyticsFacade(client: client);
+
+    await facade.initialize();
+    facade.setUserId('user-uuid');
+
+    for (var i = 0; i < 201; i++) {
+      await facade.trackScreenView(screen: 'Screen$i');
+    }
+
+    await facade.flush();
+
+    var preferences = await SharedPreferences.getInstance();
+
+    expect(batchSizes, [200]);
+    expect(
+      preferences.getStringList('analytics_event_queue'),
+      hasLength(1),
+    );
+
+    await facade.flush();
+
+    preferences = await SharedPreferences.getInstance();
+
+    expect(batchSizes, [200, 1]);
+    expect(
+      preferences.getStringList('analytics_event_queue'),
+      isEmpty,
+    );
+  });
+
+  test('does not send events without an identified user', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    var requestCount = 0;
+
+    final client = MockClient((_) async {
+      requestCount++;
+      return http.Response('{}', 201);
+    });
+
+    final facade = AnalyticsFacade(client: client);
+
+    await facade.initialize();
+    await facade.trackScreenView(screen: 'Home');
+    await facade.flush();
+
+    final preferences = await SharedPreferences.getInstance();
+
+    expect(requestCount, 0);
+    expect(
+      preferences.getStringList('analytics_event_queue'),
+      hasLength(1),
+    );
+  });
+
+  test('sends feature_used events with the expected contract', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    final client = MockClient((request) async {
+      expect(request.url.path, '/events/batch');
+
+      final body = jsonDecode(request.body) as Map<String, dynamic>;
+      final events = body['events'] as List;
+      final event = events.single as Map<String, dynamic>;
+
+      expect(event['eventType'], 'feature_used');
+      expect(event['feature'], 'friend_availability');
+      expect(event['action'], 'view_availability');
+      expect(event['screen'], 'FriendAvailability');
+      expect(event['userId'], 'user-uuid');
+      expect(event['eventId'], isNotEmpty);
+      expect(event['sessionId'], isNotEmpty);
+      expect(event['appVersion'], isNotEmpty);
+
+      return http.Response('{}', 201);
+    });
+
+    final facade = AnalyticsFacade(client: client);
+
+    await facade.initialize();
+    facade.setUserId('user-uuid');
+
+    await facade.trackFeatureUsed(
+      feature: 'friend_availability',
+      action: 'view_availability',
+      screen: 'FriendAvailability',
+    );
+
+    await facade.flush();
+
+    final preferences = await SharedPreferences.getInstance();
+
+    expect(
+      preferences.getStringList('analytics_event_queue'),
+      isEmpty,
+    );
+  });
 }
