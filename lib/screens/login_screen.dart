@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../viewmodels/auth_view_models.dart';
+import '../navigation/app_routes.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -33,12 +34,12 @@ class _LoginScreenState extends State<LoginScreen> {
       _emailController.text,
       _passwordController.text,
     );
-    if (success && mounted) Navigator.pushReplacementNamed(context, '/');
+    if (success && mounted) Navigator.pushReplacementNamed(context, AppRoutes.home);
   }
 
   Future<void> _submitGoogle() async {
     final success = await _viewModel.loginWithGoogle();
-    if (success && mounted) Navigator.pushReplacementNamed(context, '/');
+    if (success && mounted) Navigator.pushReplacementNamed(context, AppRoutes.home);
   }
 
   @override

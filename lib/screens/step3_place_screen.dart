@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../widgets/step_header.dart';
 import 'activity_created_screen.dart';
 import '../viewmodels/friends_view_model.dart';
+import '../navigation/app_routes.dart';
 
 class Step3PlaceScreen extends StatefulWidget {
   final List<String> friends;
@@ -61,7 +62,12 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
   void confirm() {
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const ActivityCreatedScreen()),
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(
+          name: AppRoutes.activityCreated,
+        ),
+        builder: (_) => const ActivityCreatedScreen()
+        ),
       (route) => route.isFirst, // deja solo el Dashboard debajo
     );
   }
