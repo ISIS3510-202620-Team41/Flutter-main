@@ -67,7 +67,7 @@ const availablePlaces = [
   ),
 ];
 
-//Todo lo necesario para crear una actividad. Se puede almacenar sin conexión.
+//Lo necesario para crear una actividad. Se puede almacenar sin conexión.
 class ActivityDraft {
   const ActivityDraft({
     required this.clientId,

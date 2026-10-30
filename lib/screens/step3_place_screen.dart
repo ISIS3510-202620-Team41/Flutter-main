@@ -4,44 +4,19 @@ import '../widgets/step_header.dart';
 import 'activity_created_screen.dart';
 import '../viewmodels/friends_view_model.dart';
 import '../navigation/app_routes.dart';
+import '../models/activity_draft.dart';
 
 class Step3PlaceScreen extends StatefulWidget {
-  final List<String> friends;
-  final List<String> categories;
-  const Step3PlaceScreen({
-    super.key,
-    required this.friends,
-    required this.categories,
-  });
+  const Step3PlaceScreen({super.key, required this.viewModel});
+
+  final ActivityCreationViewModel viewModel;
 
   @override
   State<Step3PlaceScreen> createState() => _Step3PlaceScreenState();
 }
 
 class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
-  // Test places, later they come from the database
-  final List<Map<String, String>> places = [
-    {
-      'name': 'Bistro',
-      'distance': '500 m',
-      'duration': '2 h',
-      'price': '\$30K',
-    },
-    {
-      'name': 'Pizza Hut',
-      'distance': '0.7 km',
-      'duration': '1.5 h',
-      'price': '\$20K',
-    },
-  ];
-
-  final _viewModel = ActivityCreationViewModel();
-
-  @override
-  void dispose() {
-    _viewModel.dispose();
-    super.dispose();
-  }
+  ActivityCreationViewModel get _viewModel => widget.viewModel;
 
   Widget infoItem(IconData icon, String text, Color iconColor) {
     return Padding(
@@ -59,18 +34,23 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
     );
   }
 
-  void confirm() {
+  Future<void> confirm() async {
+    final ok = await _viewModel.submit();
+    if (!ok || !mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute<void>(
-        settings: const RouteSettings(
-          name: AppRoutes.activityCreated,
+        settings: const RouteSettings(name: AppRoutes.activityCreated),
+        builder: (_) => ActivityCreatedScreen(
+          activity: _viewModel.createdActivity!,
+          friends: List<String>.from(_viewModel.selectedFriends),
+          savedOffline: _viewModel.savedOffline,
         ),
-        builder: (_) => const ActivityCreatedScreen()
-        ),
-      (route) => route.isFirst, // deja solo el Dashboard debajo
+      ),
+          (route) => route.isFirst,
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -141,11 +121,11 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                 const SizedBox(height: 14),
                 Expanded(
                   child: ListView(
-                    children: places.map((place) {
+                    children: availablePlaces.map((place) {
                       final isActive =
-                          _viewModel.selectedPlace == place['name'];
+                          _viewModel.selectedPlace == place.name;
                       return GestureDetector(
-                        onTap: () => _viewModel.selectPlace(place['name']!),
+                        onTap: () => _viewModel.selectPlace(place),
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(12),
@@ -182,7 +162,7 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      place['name']!,
+                                      place.name,
                                       style: const TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.w600,
@@ -193,17 +173,17 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                                       children: [
                                         infoItem(
                                           Icons.location_on,
-                                          place['distance']!,
+                                          place.distance!,
                                           AppColors.rosewood,
                                         ),
                                         infoItem(
                                           Icons.timer_outlined,
-                                          place['duration']!,
+                                          place.durationLabel,
                                           AppColors.grey,
                                         ),
                                         infoItem(
                                           Icons.savings_outlined,
-                                          place['price']!,
+                                          place.price,
                                           const Color(0xFFE0A93B),
                                         ),
                                       ],
@@ -226,6 +206,22 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                     }).toList(),
                   ),
                 ),
+                if (_viewModel.errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      _viewModel.errorMessage!,
+                      style: const TextStyle(fontSize: 12, color: AppColors.rosewood),
+                    ),
+                  ),
+                if (_viewModel.errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      _viewModel.errorMessage!,
+                      style: const TextStyle(fontSize: 12, color: AppColors.rosewood),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Row(
@@ -248,7 +244,7 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: confirm,
+                          onPressed: (_viewModel.canSubmit && !_viewModel.isSubmitting) ? confirm : null,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.rosewood,
                             foregroundColor: Colors.white,
@@ -257,7 +253,13 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text('Confirmar'),
+                          child: _viewModel.isSubmitting
+                              ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                              : const Text('Confirmar'),
                         ),
                       ),
                     ],
