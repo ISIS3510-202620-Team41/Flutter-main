@@ -76,14 +76,15 @@ class PendingActionsSyncService {
 
     if (repository == null) return;
 
-    final userId = await _authService.getCurrentUserId();
-
-    if (userId == null) return;
-
+    // Bloqueamos nuevas sincronizaciones antes de cualquier await.
     _isSyncing = true;
 
     try {
-      // Recuperamos acciones que quedaron procesándose antes del cierre
+      final userId = await _authService.getCurrentUserId();
+
+      if (userId == null) return;
+
+      // Recuperamos acciones que quedaron procesándose antes del cierre.
       await repository.recoverProcessing(userId);
 
       final actions = await repository.getPending(userId);
@@ -102,14 +103,14 @@ class PendingActionsSyncService {
         try {
           await _processAction(action);
 
-          // El back acepto la peticion
+          // El backend aceptó la petición.
           await repository.delete(action.id);
 
           _syncedController.add(action);
 
           await _recordJoinAnalytics(action);
         } on SessionExpiredException catch (error) {
-          // Se conserva para cuando el usuario vuelva a auth
+          // Se conserva para cuando el usuario vuelva a autenticarse.
           await repository.updateStatus(
             id: action.id,
             status: PendingActionStatus.pending,
@@ -129,10 +130,12 @@ class PendingActionsSyncService {
             attempts: action.attempts + 1,
             lastError: error.toString(),
           );
+
           if (retryable) break;
         }
       }
     } finally {
+      // Liberamos el bloqueo incluso si ocurre una excepción.
       _isSyncing = false;
     }
   }

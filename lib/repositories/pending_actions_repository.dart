@@ -27,11 +27,15 @@ class PendingActionsRepository {
     return PendingAction.fromMap(result.first);
   }
 
-  Future<List<PendingAction>> getPending(String userId,) async {
+  Future<List<PendingAction>> getPending(String userId) async {
     final result = await _database.query(
       'pending_actions',
-      where: 'user_id = ? AND status = ?',
-      whereArgs: [userId, 'PENDING', 'PROCESSING'],
+      where: 'user_id = ? AND status IN (?, ?)',
+      whereArgs: [
+        userId,
+        PendingActionStatus.pending.name.toUpperCase(),
+        PendingActionStatus.processing.name.toUpperCase(),
+      ],
       orderBy: 'created_at ASC',
     );
 
