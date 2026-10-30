@@ -15,6 +15,8 @@ import 'screens/register_screen.dart';
 import 'screens/step1_invite_screen.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
+import 'services/connectivity_service.dart';
+import 'widgets/offline_banner.dart';
 
 class LlamallaApp extends StatefulWidget {
   const LlamallaApp({super.key});
@@ -123,7 +125,25 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => _trackStartup(),
               );
-              return child ?? const SizedBox.shrink();
+
+              return StreamBuilder<bool>(
+                stream: ConnectivityService.instance.onConnectivityChanged,
+                initialData: ConnectivityService.instance.isOnline,
+                builder: (context, snapshot) {
+                  final isOffline = snapshot.data == false;
+
+                  return Column(
+                    children: [
+                      if (isOffline)
+                        const OfflineBanner(),
+
+                      Expanded(
+                        child: child ?? const SizedBox.shrink(),
+                      ),
+                    ],
+                  );
+                },
+              );
             },
             home: authSession.isAuthenticated == true
                 ? const DashboardScreen()

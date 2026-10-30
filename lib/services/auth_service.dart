@@ -105,23 +105,40 @@ class AuthService {
 
   Future<bool> restoreSession() async {
     final preferences = await SharedPreferences.getInstance();
+
+    final accessToken = preferences.getString('access_token');
     final refreshToken = preferences.getString('refresh_token');
-    if (refreshToken == null || refreshToken.isEmpty) return false;
+
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return false;
+    }
+
+    if (accessToken == null || accessToken.isEmpty) {
+      return false;
+    }
 
     try {
       await refresh().timeout(const Duration(seconds: 5));
       return true;
-    } on AuthException {
-      await clearSession();
-      return false;
+    } on AuthException catch (error) {
+      final rejected = [400, 401, 403].contains(error.statusCode);
+
+      if (rejected) {
+        await clearSession();
+        return false;
+      }
+
+      // Error del servidor: conservamos la sesión local.
+      return true;
     } on http.ClientException {
-      await clearSession();
-      return false;
+      // No hay conexión disponible.
+      return true;
     } on TimeoutException {
-      await clearSession();
-      return false;
+      // El servidor no respondió a tiempo.
+      return true;
     }
   }
+
 
   Future<AuthResult> refresh() async {
     final preferences = await SharedPreferences.getInstance();
@@ -481,6 +498,18 @@ class AuthService {
     debugPrint('[GOOGLE][ACCOUNT] Cuenta disponible: ${account.email}');
 
     return account;
+  }
+
+  Future<String?> getCurrentUserId() async {
+    final preferences = await SharedPreferences.getInstance();
+
+    final accessToken = preferences.getString('access_token');
+
+    if (accessToken == null || accessToken.isEmpty) {
+      return null;
+    }
+
+    return AnalyticsFacade.instance.decodeUserId(accessToken);
   }
 }
 
