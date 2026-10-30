@@ -127,4 +127,19 @@ class ActivityService {
     }
     throw ActivityException(message, statusCode: response.statusCode);
   }
+  Future<Activity> createActivity(
+      Map<String, dynamic> body, {
+        String? source,
+      }) async {
+    final query = source == null ? '' : '?source=$source';
+    final response = await _authService.authenticatedRequest(
+      method: 'POST',
+      path: '/activities$query',
+      body: jsonEncode(body),
+    );
+    _check(response, 'create the activity');
+    return Activity.fromJson(
+      Map<String, dynamic>.from(jsonDecode(response.body) as Map),
+    );
+  }
 }
