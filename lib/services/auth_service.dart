@@ -6,8 +6,10 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 
 import '../analytics/analytics_facade.dart';
+import 'http_cache_service.dart';
 
 final authSession = AuthSession();
 
@@ -157,6 +159,12 @@ class AuthService {
         );
       }
     } finally {
+      try {
+        await HttpCacheService.instance.clear();
+      } catch (error) {
+        debugPrint('[HTTP CACHE][CLEAR ERROR] $error');
+      }
+
       await clearSession();
 
       //Cerramos aca la sesion que se tiene con google si esta activa
@@ -167,7 +175,7 @@ class AuthService {
         _googleAccount = null;
 
         debugPrint('[GOOGLE][SIGNOUT] Sesion de google del usuario cerrada');
-      } catch (error, stackTrace){
+      } catch (error, stackTrace) {
         debugPrint('[GOOGLE][SIGNOUT][ERROR] $error');
         debugPrintStack(stackTrace: stackTrace);
       }
@@ -179,6 +187,79 @@ class AuthService {
     await preferences.remove('access_token');
     await preferences.remove('refresh_token');
     AnalyticsFacade.instance.setUserId(null);
+  }
+
+  Future<http.Response> authenticatedCachedGet({
+    required String path,
+    Map<String, String>? headers,
+  }) async {
+    final preferences = await SharedPreferences.getInstance();
+
+    var accessToken = preferences.getString('access_token');
+
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const SessionExpiredException();
+    }
+
+    Future<http.Response> send() async {
+      final dio = await HttpCacheService.instance.getDio();
+
+      final uri = Uri.parse('$_baseUrl$path');
+
+      final response = await dio.getUri<String>(
+        uri,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $accessToken',
+            ...?headers,
+          },
+          responseType: ResponseType.plain,
+          validateStatus: (status) => status != null,
+        ),
+      );
+
+      final responseHeaders = <String, String>{};
+
+      response.headers.map.forEach((name, values) {
+        responseHeaders[name] = values.join(', ');
+      });
+
+      return http.Response(
+        response.data ?? '',
+        response.statusCode ?? 0,
+        headers: responseHeaders,
+        request: http.Request('GET', uri),
+      );
+    }
+
+    var response = await send();
+
+    if (response.statusCode != 401) {
+      return response;
+    }
+
+    // Si el token expiró, conservamos el mecanismo actual de renovación.
+    late final AuthResult refreshed;
+
+    try {
+      refreshed = await refresh();
+    } on AuthException {
+      await clearSession();
+      authSession.setUnauthenticated();
+      throw const SessionExpiredException();
+    }
+
+    accessToken = refreshed.accessToken;
+
+    response = await send();
+
+    if (response.statusCode == 401) {
+      await clearSession();
+      authSession.setUnauthenticated();
+      throw const SessionExpiredException();
+    }
+
+    return response;
   }
 
   Future<http.Response> authenticatedRequest({

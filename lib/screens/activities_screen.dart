@@ -10,7 +10,7 @@ import '../viewmodels/activity_view_models.dart';
 class ActivitiesScreen extends StatefulWidget {
   const ActivitiesScreen({super.key, this.onOpenDetail});
 
-  final VoidCallback? onOpenDetail;
+  final ValueChanged<String>? onOpenDetail;
 
   @override
   State<ActivitiesScreen> createState() => _ActivitiesScreenState();
@@ -126,15 +126,19 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                     ),
                   )
                 else
-                  ..._viewModel.visibleActivities.map(
-                        (activity) => Padding(
+                  ..._viewModel.visibleActivities.map((activity) {
+                    final activityId = activity.id;
+
+                    return Padding(
                       padding: const EdgeInsets.only(bottom: 9),
                       child: _ActivityRow(
                         activity: activity,
-                        onTap: widget.onOpenDetail,
+                        onTap: activityId == null
+                            ? null
+                            : () => widget.onOpenDetail?.call(activityId),
                       ),
-                    ),
-                  ),
+                    );
+                  }),
             ],
           ),
         ),

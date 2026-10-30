@@ -78,6 +78,7 @@ class _ActivityService extends ActivityService {
     required double lon,
     double radiusKm = 5,
     String timezone = 'America/Bogota',
+    bool calculateDistanceLocally = true,
   }) async {
     return const RecommendationBatch(
       activities: [

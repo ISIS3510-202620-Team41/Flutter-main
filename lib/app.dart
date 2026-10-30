@@ -169,9 +169,15 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                     builder: (_) => const ActivityCreatedScreen(),
                   );
                 case AppRoutes.activityDetail:
+                  final activityId = settings.arguments;
+
                   return MaterialPageRoute<void>(
                     settings: settings,
-                    builder: (_) => const ActivityDetailScreen(),
+                    builder: (_) => ActivityDetailScreen(
+                      activityId: activityId is String
+                          ? activityId
+                          : null,
+                    ),
                   );
                 default:
                   return null;
