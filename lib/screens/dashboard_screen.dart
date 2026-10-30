@@ -37,7 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       const FriendsScreen(),
       ActivitiesScreen(
-        onOpenDetail: () => Navigator.pushNamed(context, AppRoutes.activityDetail),
+        onOpenDetail: (activityId) => Navigator.pushNamed(context, AppRoutes.activityDetail, arguments: activityId),
       ),
       const ProfileScreen(),
     ];

@@ -34,6 +34,7 @@ class HomeViewModel extends ChangeNotifier {
   UserProfile? profile;
   FreeInterval? nextFreeInterval;
   bool isLoading = true;
+  bool isLoadingRecommendations = true;
   String? errorMessage;
 
   List<Activity> recommendations = const [];
@@ -56,21 +57,29 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> load() async {
     isLoading = true;
     errorMessage = null;
-    recommendations = const [];
-    recommendationId = null;
-    recommendationFreeMinutes = null;
     recommendationsError = null;
     actionMessage = null;
+
+    isLoadingRecommendations = recommendations.isEmpty;
     notifyListeners();
+
+    // Cargamos las actividades que hay en cache
+    final recommendationsFuture = _loadRecommendations();
+
     try {
       profile = await _profileService.getCurrentUser();
+
       final date = _now();
       final gaps = await _scheduleService.getGaps(
         date: DateTime(date.year, date.month, date.day),
       );
+
       final now = _now();
-      final upcoming = gaps.free.where((gap) => gap.end.isAfter(now)).toList()
+      final upcoming = gaps.free
+          .where((gap) => gap.end.isAfter(now))
+          .toList()
         ..sort((a, b) => a.start.compareTo(b.start));
+
       nextFreeInterval = upcoming.isEmpty ? null : upcoming.first;
     } on ProfileException catch (error) {
       errorMessage = error.message;
@@ -79,30 +88,64 @@ class HomeViewModel extends ChangeNotifier {
     } catch (_) {
       errorMessage = 'No pudimos cargar tu información. Intenta de nuevo.';
     } finally {
-      await _loadRecommendations();
       isLoading = false;
       notifyListeners();
     }
+
+    await recommendationsFuture;
   }
 
   Future<void> _loadRecommendations() async {
     recommendationsError = null;
+
+    // Cargamos actividades en cache
+    try {
+      recommendations = await _activityService.getCachedActivities();
+
+      recommendationId = null;
+      recommendationFreeMinutes = null;
+
+      isLoadingRecommendations = recommendations.isEmpty;
+      notifyListeners();
+    } catch (_) {
+    }
+
     try {
       final where = await _locationService.current();
+
+      if (!where.isFallback) {
+        recommendations = await _activityService.getCachedActivities(
+          lat: where.lat,
+          lon: where.lon,
+        );
+
+        isLoadingRecommendations = false;
+        notifyListeners();
+      }
+
       final batch = await _activityService.getRecommendations(
         lat: where.lat,
         lon: where.lon,
+        calculateDistanceLocally: !where.isFallback,
       );
+
+      // Remplazamos la cache para que tenga datos mas actualizados
       recommendations = batch.activities;
       recommendationId = batch.recommendationId;
       recommendationFreeMinutes = batch.freeMinutes;
 
+      recommendationsError = null;
     } on ActivityException catch (error) {
-      recommendations = const [];
-      recommendationsError = error.message;
+      if (recommendations.isEmpty) {
+        recommendationsError = error.message;
+      }
     } catch (_) {
-      recommendations = const [];
-      recommendationsError = 'No pudimos cargar las recomendaciones.';
+      if (recommendations.isEmpty) {
+        recommendationsError = 'No pudimos cargar las recomendaciones.';
+      }
+    } finally {
+      isLoadingRecommendations = false;
+      notifyListeners();
     }
   }
 
