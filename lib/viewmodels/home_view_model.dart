@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 
 import '../models/activity.dart';
 import '../models/profile_models.dart';
@@ -41,6 +42,7 @@ class HomeViewModel extends ChangeNotifier {
   int? recommendationFreeMinutes;
   String? recommendationsError;
   String? actionMessage;
+  String networkQuality = 'unknown';
 
   String get greetingName {
     final name = profile?.name.trim() ?? '';
@@ -61,13 +63,16 @@ class HomeViewModel extends ChangeNotifier {
     recommendationFreeMinutes = null;
     recommendationsError = null;
     actionMessage = null;
+    networkQuality = 'unknown';
     notifyListeners();
     try {
+      final probe = Stopwatch()..start();
       profile = await _profileService.getCurrentUser();
       final date = _now();
       final gaps = await _scheduleService.getGaps(
         date: DateTime(date.year, date.month, date.day),
       );
+      networkQuality = classifyNetworkQuality(probe.elapsed);
       final now = _now();
       final upcoming = gaps.free.where((gap) => gap.end.isAfter(now)).toList()
         ..sort((a, b) => a.start.compareTo(b.start));
@@ -89,14 +94,24 @@ class HomeViewModel extends ChangeNotifier {
     recommendationsError = null;
     try {
       final where = await _locationService.current();
+      final watch = Stopwatch()..start();
       final batch = await _activityService.getRecommendations(
         lat: where.lat,
         lon: where.lon,
+        networkQuality: networkQuality,
       );
+      watch.stop();
       recommendations = batch.activities;
       recommendationId = batch.recommendationId;
       recommendationFreeMinutes = batch.freeMinutes;
 
+      // BQ10: tiempo de carga de la pantalla de recomendaciones
+      unawaited(_analyticsFacade.trackAppLoadingTime(
+        loadType: 'screen',
+        screen: 'recommendations',
+        duration: watch.elapsed,
+        networkQuality: networkQuality,
+      ));
     } on ActivityException catch (error) {
       recommendations = const [];
       recommendationsError = error.message;
@@ -124,6 +139,7 @@ class HomeViewModel extends ChangeNotifier {
         id,
         recommendationId: recommendationId,
         freeTimeMinutes: recommendationFreeMinutes,
+        networkQuality: networkQuality,
       );
 
       try {
@@ -153,4 +169,11 @@ String formatClockTime(DateTime value) {
   final minute = value.minute.toString().padLeft(2, '0');
   final period = value.hour >= 12 ? 'PM' : 'AM';
   return '$hour:$minute $period';
+}
+
+String classifyNetworkQuality(Duration elapsed) {
+  final ms = elapsed.inMilliseconds;
+  if (ms < 1500) return 'good';
+  if (ms < 4000) return 'fair';
+  return 'poor';
 }

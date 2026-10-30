@@ -71,6 +71,9 @@ class _ActivityService extends ActivityService {
   String? joinedRecommendationId;
   int? joinedFreeMinutes;
   bool failJoin = false;
+  String? joinedNetworkQuality;
+  String? joinedSource;
+  String? requestedNetworkQuality;
 
   @override
   Future<RecommendationBatch> getRecommendations({
@@ -78,6 +81,7 @@ class _ActivityService extends ActivityService {
     required double lon,
     double radiusKm = 5,
     String timezone = 'America/Bogota',
+    String networkQuality = 'unknown',
   }) async {
     return const RecommendationBatch(
       activities: [
@@ -98,13 +102,16 @@ class _ActivityService extends ActivityService {
   }
 
   @override
-  Future<void> join( String activityId, { String? recommendationId, int? freeTimeMinutes, }) async {
+  Future<void> join( String activityId, { String? recommendationId, int? freeTimeMinutes,String? networkQuality,
+    String? source, }) async {
     if (failJoin) {
       throw Exception('Join failed');
     }
     joinedId = activityId;
     joinedRecommendationId = recommendationId;
     joinedFreeMinutes = freeTimeMinutes;
+    joinedNetworkQuality = networkQuality;
+    joinedSource = source;
   }
 }
 
