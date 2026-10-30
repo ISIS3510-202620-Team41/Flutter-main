@@ -173,7 +173,7 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                                       children: [
                                         infoItem(
                                           Icons.location_on,
-                                          place.distance!,
+                                          place.distance,
                                           AppColors.rosewood,
                                         ),
                                         infoItem(
