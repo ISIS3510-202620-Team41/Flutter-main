@@ -2,14 +2,22 @@ const activityCategoryLabels = ['Sports', 'Study', 'Culture', 'Entertainment'];
 
 String categoryLabel(String? backendValue) {
   switch (backendValue) {
+    case 'DEPORTES':
     case 'SPORTS':
       return 'Sports';
+
+    case 'ESTUDIO':
     case 'STUDY':
       return 'Study';
+
+    case 'CULTURA':
     case 'CULTURE':
       return 'Culture';
+
+    case 'ENTRETENIMIENTO':
     case 'ENTERTAINMENT':
       return 'Entertainment';
+
     default:
       return backendValue ?? '';
   }
@@ -74,9 +82,9 @@ class Activity {
       locationName: json['locationName'] as String?,
       distance: km == null ? '' : _formatDistance(km),
       duration: minutes == null ? '' : _formatMinutes(minutes),
-      price: '',
+      price: json['price'] as String? ?? '',
       people: participants == 1 ? '1 registered' : '$participants registered participants',
-      imageUrl: '',
+      imageUrl:json['imageUrl'] as String? ?? '',
       fitsWindow:
       freeMinutes == null || minutes == null || minutes <= freeMinutes,
       score: score,
