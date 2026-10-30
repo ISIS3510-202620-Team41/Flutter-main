@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:llamalla/repositories/activity_local_repository.dart';
 
+import '../database/local_database_facade.dart';
 import '../models/activity.dart';
+import '../models/activity_record.dart';
 import 'auth_service.dart';
 
 class ActivityException implements Exception {
@@ -27,10 +30,17 @@ class RecommendationBatch {
 }
 
 class ActivityService {
-  ActivityService({AuthService? authService})
-      : _authService = authService ?? AuthService();
+  ActivityService({
+    AuthService? authService,
+    ActivityLocalRepository? localRepository,
+    }): _authService = authService ?? AuthService(),
+        _injectedLocalRepository = localRepository;
 
   final AuthService _authService;
+  final ActivityLocalRepository? _injectedLocalRepository;
+
+  ActivityLocalRepository? get _localRepository =>
+    _injectedLocalRepository ?? LocalDatabaseFacade.instance.activities;
 
   Future<RecommendationBatch> getRecommendations({
     required double lat,
@@ -52,6 +62,16 @@ class ActivityService {
     final recommendationId = response.headers['x-recommendation-id'];
 
     final items = _decodeList(response.body);
+
+    final records = items.map((item) {
+    final map = Map<String, dynamic>.from(item as Map);
+    final activityJson = Map<String, dynamic>.from(map['activity'] as Map);
+
+    return ActivityRecord.fromJson(activityJson);
+    }).toList(growable: false);
+
+    await _cacheActivities(records);
+
     final activities = items.map((item) {
       final map = Map<String, dynamic>.from(item as Map);
       return Activity.fromJson(
@@ -79,8 +99,16 @@ class ActivityService {
     );
     _check(response, 'load nearby activities');
 
-    return _decodeList(response.body)
-        .map((item) => Activity.fromJson(Map<String, dynamic>.from(item as Map)))
+    final records = _decodeList(response.body)
+        .map((item) => ActivityRecord.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ))
+        .toList(growable: false);
+
+    await _cacheActivities(records);
+
+    return records
+        .map((record) => record.toActivity())
         .toList(growable: false);
   }
 
@@ -112,6 +140,33 @@ class ActivityService {
       throw const ActivityException('Invalid server response');
     }
     return decoded;
+  }
+
+  Future<List<Activity>> getCachedActivities() async {
+    final repository = _localRepository;
+
+    if (repository == null) {
+      return [];
+    }
+
+    final records = await repository.getAll();
+
+    return records
+        .map((record) => record.toActivity())
+        .toList(growable: false);
+  }
+
+  Future<void> _cacheActivities(List<ActivityRecord> records,) async {
+    final repository = _localRepository;
+
+    if (repository == null || records.isEmpty) {
+      return;
+    }
+
+    try {
+      await repository.upsertAll(records);
+    } catch (_) {
+    }
   }
 
   void _check(http.Response response, String action) {
