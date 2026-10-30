@@ -17,6 +17,8 @@ import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'services/connectivity_service.dart';
 import 'widgets/offline_banner.dart';
+import 'services/connectivity_service.dart';
+import 'services/pending_actions_sync_service.dart';
 
 class LlamallaApp extends StatefulWidget {
   const LlamallaApp({super.key});
@@ -31,6 +33,8 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
   final _startupStopwatch = Stopwatch()..start();
   late final Timer _analyticsTimer;
   bool _startupTracked = false;
+  final _connectivityService = ConnectivityService.instance;
+  final _pendingActionsSyncService = PendingActionsSyncService.instance;
 
   late final AnalyticsNavigatorObserver _analyticsObserver =
     AnalyticsNavigatorObserver(
@@ -45,8 +49,16 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addObserver(this);
     authSession.addListener(_onAuthChanged);
+
+    // Inicia el monitor global de conectividad.
+    unawaited(_connectivityService.start());
+
+    // Inicia el listener de sincronización.
+    _pendingActionsSyncService.start();
+
     _analyticsTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => unawaited(AnalyticsFacade.instance.flush()),
@@ -67,6 +79,10 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
         state == AppLifecycleState.detached) {
       unawaited(AnalyticsFacade.instance.flush());
     }
+
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshAndSync());
+    }
   }
 
   void _trackStartup() {
@@ -83,11 +99,26 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
   }
 
   void _onAuthChanged() {
-    if (!mounted || authSession.isAuthenticated != false) return;
-    _navigatorKey.currentState?.pushNamedAndRemoveUntil(
-      AppRoutes.login,
-      (_) => false,
-    );
+    if (!mounted) return;
+
+    // Si el usuario inicia o recupera sesión, intentamos sincronizar las acciones pendientes.
+    if (authSession.isAuthenticated == true) {
+      if (_connectivityService.isOnline == true) {
+        unawaited(
+          _pendingActionsSyncService.syncPendingActions(),
+        );
+      }
+
+      return;
+    }
+
+    // Si el usuario cierra sesión, regresamos al login.
+    if (authSession.isAuthenticated == false) {
+      _navigatorKey.currentState?.pushNamedAndRemoveUntil(
+        AppRoutes.login,
+        (_) => false,
+      );
+    }
   }
 
   Future<bool> _restoreSession() async {
@@ -98,6 +129,15 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
       authSession.setUnauthenticated();
     }
     return restored;
+  }
+
+  Future<void> _refreshAndSync() async {
+    await _connectivityService.refresh();
+
+    if (authSession.isAuthenticated == true &&
+        _connectivityService.isOnline == true) {
+      await _pendingActionsSyncService.syncPendingActions();
+    }
   }
 
   @override

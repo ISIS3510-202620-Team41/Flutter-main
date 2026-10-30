@@ -10,11 +10,13 @@ class ActivityCard extends StatelessWidget {
     required this.activity,
     this.onChoose,
     this.compact = false,
+    this.isPending = false,
   });
 
   final Activity activity;
   final VoidCallback? onChoose;
   final bool compact;
+  final bool isPending;
 
   @override
   Widget build(BuildContext context) {
@@ -77,14 +79,24 @@ class ActivityCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: onChoose,
+                    onPressed: isPending ? null : onChoose,
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.rosewood,
                       foregroundColor: AppColors.white,
+                      disabledBackgroundColor:
+                          AppColors.greenLight,
+                      disabledForegroundColor:
+                          AppColors.green,
                       minimumSize: const Size.fromHeight(34),
                       padding: const EdgeInsets.symmetric(vertical: 7),
                     ),
-                    child: const Text('Elegir →', style: TextStyle(fontSize: 12)),
+                    child: Text(
+                      isPending
+                          ? 'Inscrito (Pendiente de sincronizar)'
+                          : 'Elegir →',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
               ],
