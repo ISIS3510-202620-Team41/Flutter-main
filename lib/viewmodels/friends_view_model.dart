@@ -3,11 +3,17 @@ import 'package:uuid/uuid.dart';
 
 import '../data/mock_data.dart';
 import '../models/activity.dart';
+import '../services/friends_service.dart';
 import '../models/activity_draft.dart';
 import '../repositories/activity_repository.dart';
 import '../services/activity_service.dart';
 
 class FriendsViewModel extends ChangeNotifier {
+  FriendsViewModel({FriendsService? friendsService})
+      : _friendsService = friendsService ?? FriendsService();
+
+  final FriendsService _friendsService;
+
   String query = '';
 
   List<FriendStatus> get visibleFriends {
@@ -22,6 +28,13 @@ class FriendsViewModel extends ChangeNotifier {
     query = value;
     notifyListeners();
   }
+/// Consulta /friends/gaps para que el backend registre el evento "viewed"
+Future<void> load() async {
+  try {
+    await _friendsService.loadAvailableFriends();
+  } catch (_) {
+  }
+}
 }
 
 class ActivityCreationViewModel extends ChangeNotifier {

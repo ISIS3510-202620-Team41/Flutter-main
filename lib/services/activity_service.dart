@@ -47,12 +47,14 @@ class ActivityService {
     required double lon,
     double radiusKm = 5,
     String timezone = 'America/Bogota',
+    String networkQuality = 'unknown',
   }) async {
     final response = await _authService.authenticatedRequest(
       method: 'GET',
       path:
-      '/activities/recommendations?lat=$lat&lon=$lon&radius=$radiusKm'
-          '&tz=${Uri.encodeQueryComponent(timezone)}',
+          '/activities/recommendations?lat=$lat&lon=$lon&radius=$radiusKm'
+          '&tz=${Uri.encodeQueryComponent(timezone)}'
+          '&networkQuality=$networkQuality',
     );
     _check(response, 'load the recommendations');
 
@@ -116,14 +118,14 @@ class ActivityService {
       String activityId, {
         String? recommendationId,
         int? freeTimeMinutes,
+        String? networkQuality,
+        String? source,
       }) async {
     final query = <String, String>{};
-    if (recommendationId != null) {
-      query['recommendationId'] = recommendationId;
-    }
-    if (freeTimeMinutes != null) {
-      query['freeTimeMinutes'] = '$freeTimeMinutes';
-    }
+    if (recommendationId != null) query['recommendationId'] = recommendationId;
+    if (freeTimeMinutes != null) query['freeTimeMinutes'] = '$freeTimeMinutes';
+    if (networkQuality != null) query['networkQuality'] = networkQuality;
+    if (source != null) query['source'] = source;
     final queryString =
     query.isEmpty ? '' : '?${Uri(queryParameters: query).query}';
 

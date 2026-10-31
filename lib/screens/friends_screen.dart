@@ -16,6 +16,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
   final _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _viewModel.load();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _viewModel.dispose();
