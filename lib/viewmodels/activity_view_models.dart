@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
-import '../cache/activity_image_cache.dart';
 import '../data/mock_data.dart';
 import '../models/activity.dart';
 import '../services/activity_service.dart';
