@@ -1,11 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../cache/activity_image_cache.dart';
 import '../data/mock_data.dart';
 import '../models/activity.dart';
 import '../services/activity_service.dart';
 import '../services/location_service.dart';
-import 'dart:async';
-import '../cache/activity_image_cache.dart';
 
 class ActivitiesViewModel extends ChangeNotifier {
   ActivitiesViewModel({
@@ -25,6 +26,8 @@ class ActivitiesViewModel extends ChangeNotifier {
 
   List<Activity> _activities = const [];
   bool isLoading = true;
+
+  /// True when the list comes from SQLite because the request failed.
   bool showingCached = false;
   String? errorMessage;
 
@@ -32,14 +35,14 @@ class ActivitiesViewModel extends ChangeNotifier {
     final normalizedQuery = query.trim().toLowerCase();
     return _activities
         .where((activity) {
-          final matchesCategory =
-              selectedCategory == allCategories||
+      final matchesCategory =
+          selectedCategory == allCategories ||
               activity.category.toLowerCase() == selectedCategory.toLowerCase();
-          final matchesQuery =
-              normalizedQuery.isEmpty ||
+      final matchesQuery =
+          normalizedQuery.isEmpty ||
               activity.name.toLowerCase().contains(normalizedQuery);
-          return matchesCategory && matchesQuery;
-        })
+      return matchesCategory && matchesQuery;
+    })
         .toList(growable: false);
   }
 
@@ -50,23 +53,27 @@ class ActivitiesViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       final where = await _locationService.current();
+      // getNearby also saves the activities in SQLite and in the memory cache.
       _activities = await _activityService.getNearby(
         lat: where.lat,
         lon: where.lon,
       );
+      // Download the photos in the background so they work offline later.
       unawaited(ActivityImageCacheManager.prefetch(
         _activities.map((activity) => activity.imageUrl),
       ));
     } on ActivityException catch (error) {
-      errorMessage = error.message;
+      await _showSavedOr(error.message);
     } catch (_) {
-      errorMessage = 'No pudimos cargar las actividades cercanas.';
+      await _showSavedOr('No pudimos cargar las actividades cercanas.');
     } finally {
       isLoading = false;
       notifyListeners();
     }
-
   }
+
+  /// If the request failed but SQLite has activities, show them instead of
+  /// an error screen.
   Future<void> _showSavedOr(String message) async {
     final saved = await _activityService.getCachedActivities();
     if (saved.isEmpty) {
