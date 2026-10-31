@@ -21,8 +21,13 @@ dependencies:
   geolocator: ^14.0.2
   sqflite: ^2.4.5
   path: ^1.9.1
+  dio: 5.11.1
+  dio_cache_interceptor: 4.0.7
+  http_cache_file_store: 2.0.2
+  connectivity_plus: 6.1.5
   cached_network_image: ^4.0.6
   flutter_cache_manager: ^3.4.6
+
 
 dev_dependencies:
   flutter_test:

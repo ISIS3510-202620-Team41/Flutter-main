@@ -110,7 +110,7 @@ class ActivityRecord {
   }
 
   // Pasa el modelo a un modelo aceptado por la UI
-  Activity toActivity({double? score, int? freeMinutes,}) {
+  Activity toActivity({double? score, int? freeMinutes, double? calculatedDistanceKm, bool recalculateDistance = false, }) {
     return Activity.fromJson(
       {
         'id': id,
@@ -122,7 +122,9 @@ class ActivityRecord {
         'locationName': locationName,
         'latitude': latitude,
         'longitude': longitude,
-        'distanceKm': distanceKm,
+        'distanceKm': recalculateDistance
+            ? calculatedDistanceKm
+            : distanceKm,
         'participants': participants,
         'capacity': capacity,
         'price': price,

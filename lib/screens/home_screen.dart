@@ -6,6 +6,7 @@ import '../widgets/header.dart';
 import '../widgets/activity_card.dart';
 import '../widgets/section_title.dart';
 import '../viewmodels/home_view_model.dart';
+import '../navigation/app_routes.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.onOpenFlow});
@@ -26,19 +27,47 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _choose(Activity activity) async {
+    final activityId = activity.id;
+
+    if (activityId == null || activityId.isEmpty) {
+      return;
+    }
+
     final joined = await _viewModel.choose(activity);
+
     if (!mounted) return;
-    if (joined) {
-      Navigator.pushNamed(context, '/activity-detail');
-    } else {
+
+    if (!joined) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _viewModel.actionMessage ?? 'No pudimos unirte a la actividad.',
+            _viewModel.actionMessage ??
+                'No pudimos unirnos a la actividad.',
           ),
         ),
       );
+
+      return;
     }
+
+    if (_viewModel.wasLastJoinQueued) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _viewModel.actionMessage ??
+                'Inscripción pendiente de sincronización.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    Navigator.pushNamed(
+      context,
+      AppRoutes.activityDetail,
+      arguments: activityId,
+    );
   }
 
   @override
@@ -75,10 +104,19 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 20),
               const SectionTitle('Actividades recomendadas'),
               const SizedBox(height: 10),
-              if (_viewModel.recommendationsError != null)
+              if (_viewModel.recommendationsError != null &&
+                  _viewModel.recommendations.isEmpty)
                 Text(
                   _viewModel.recommendationsError!,
                   style: const TextStyle(fontSize: 12),
+                )
+              else if (_viewModel.recommendations.isEmpty &&
+                  _viewModel.isLoadingRecommendations)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                    child: CircularProgressIndicator(),
+                  ),
                 )
               else if (_viewModel.recommendations.isEmpty)
                 const Text(
@@ -86,15 +124,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(fontSize: 12),
                 )
               else
-                ..._viewModel.recommendations.map(
-                      (activity) => Padding(
+                ..._viewModel.recommendations.map((activity) {
+                  final activityId = activity.id;
+
+                  final isPending = activityId != null &&
+                      _viewModel.isActivityPending(activityId);
+
+                  return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: ActivityCard(
                       activity: activity,
+                      isPending: isPending,
                       onChoose: () => _choose(activity),
                     ),
-                  ),
-                ),
+                  );
+                }),
             ],
           ),
         ),
