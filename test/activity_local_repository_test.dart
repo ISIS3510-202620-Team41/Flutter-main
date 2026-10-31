@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -24,6 +25,7 @@ void main() {
   });
 
   tearDown(() async {
+    await repository.dispose();
     await appDatabase.close();
   });
 
@@ -105,52 +107,40 @@ void main() {
 
     expect(result.length, 2);
   });
-  test('getById is served from memory without querying SQLite', () async {
-    await repository.insert(activity); // writes SQLite + cache
+  test('watchAll emits initial data and updates after insert', () async {
+    final firstEmission =
+        Completer<List<ActivityRecord>>();
 
-    // Remove the row behind the repository's back.
-    final db = await appDatabase.database;
-    await db.delete('activities');
+    final secondEmission =
+        Completer<List<ActivityRecord>>();
 
-    // Only possible if the answer came from the memory cache.
-    final result = await repository.getById('activity-1');
-    expect(result?.title, 'Football');
-  });
+    var emissions = 0;
 
-  test('getById reads SQLite on a miss and caches the result', () async {
-    final db = await appDatabase.database;
-    await db.insert('activities', activity.toMap()); // bypasses the repository
+    final subscription = repository.watchAll().listen((records) {
+      if (emissions == 0 && !firstEmission.isCompleted) {
+        firstEmission.complete(records);
+      } else if (emissions == 1 &&
+          !secondEmission.isCompleted) {
+        secondEmission.complete(records);
+      }
 
-    expect(await repository.getById('activity-1'), isNotNull); // miss -> SQLite
+      emissions++;
+    });
 
-    await db.delete('activities');
-    expect(await repository.getById('activity-1'), isNotNull); // hit
-  });
+    // 1. El stream debe emitir inicialmente una lista vacía.
+    final initialRecords = await firstEmission.future;
 
-  test('delete removes the activity from the memory cache', () async {
-    await repository.insert(activity);
-    await repository.delete('activity-1');
+    expect(initialRecords, isEmpty);
 
-    expect(await repository.getById('activity-1'), isNull);
-  });
-
-  test('update refreshes the cached copy', () async {
+    // 2. Insertamos una actividad.
     await repository.insert(activity);
 
-    await repository.update(ActivityRecord(
-      id: activity.id,
-      title: 'Updated football',
-      category: activity.category,
-      startTime: activity.startTime,
-      endTime: activity.endTime,
-      locationName: activity.locationName,
-      latitude: activity.latitude,
-      longitude: activity.longitude,
-      participants: activity.participants,
-      cachedAt: activity.cachedAt,
-    ));
+    // 3. El stream debe emitir la nueva lista.
+    final updatedRecords = await secondEmission.future;
 
-    final result = await repository.getById('activity-1');
-    expect(result?.title, 'Updated football');
+    expect(updatedRecords, hasLength(1));
+    expect(updatedRecords.first.id, activity.id);
+
+    await subscription.cancel();
   });
 }

@@ -60,7 +60,6 @@ class AuthService {
     return result;
   }
 
-
   // Hace auth para el uso de google calendar y manda el token de identidad al back
   Future<AuthResult> loginWithGoogle() async {
     try {
@@ -80,7 +79,7 @@ class AuthService {
 
       throw AuthException(
         message:
-        error.description ?? 'No fue posible iniciar sesión con Google.',
+            error.description ?? 'No fue posible iniciar sesión con Google.',
       );
     }
   }
@@ -123,11 +122,15 @@ class AuthService {
         return false;
       }
 
-      return _keepSavedSession(preferences);
+      // Error del servidor que no representa
+      // necesariamente una sesión inválida.
+      return true;
     } on http.ClientException {
-      return _keepSavedSession(preferences);
+      // No hay conexión o no se puede contactar al servidor.
+      return true;
     } on TimeoutException {
-      return _keepSavedSession(preferences);
+      // El servidor no respondió a tiempo.
+      return true;
     }
   }
 

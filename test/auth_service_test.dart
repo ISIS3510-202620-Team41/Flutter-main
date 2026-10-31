@@ -111,12 +111,13 @@ void main() {
   });
 
   test(
-    'restoreSession clears stale tokens when backend is unavailable',
+    'restoreSession preserves cached tokens when backend is unavailable',
     () async {
       SharedPreferences.setMockInitialValues({
         'access_token': 'access-token',
         'refresh_token': 'refresh-token',
       });
+
       final client = MockClient(
             (_) async => throw http.ClientException('Connection refused'),
       );

@@ -75,6 +75,7 @@ class HomeViewModel extends ChangeNotifier {
   String? actionMessage;
   String networkQuality = 'unknown';
 
+  Completer<void> _networkProbe = Completer<void>();
   String get greetingName {
     final name = profile?.name.trim() ?? '';
     return name.isEmpty ? 'allí' : name.split(RegExp(r'\s+')).first;
@@ -93,14 +94,12 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> load() async {
     isLoading = true;
     errorMessage = null;
-    recommendations = const [];
-    recommendationId = null;
-    recommendationFreeMinutes = null;
     recommendationsError = null;
     actionMessage = null;
+    networkQuality = 'unknown';
+    _networkProbe = Completer<void>();
 
     isLoadingRecommendations = recommendations.isEmpty;
-    networkQuality = 'unknown';
     notifyListeners();
 
     // Cargamos las actividades que hay en cache
@@ -116,6 +115,7 @@ class HomeViewModel extends ChangeNotifier {
         date: DateTime(date.year, date.month, date.day),
       );
       networkQuality = classifyNetworkQuality(probe.elapsed);
+
       final now = _now();
       final upcoming = gaps.free
           .where((gap) => gap.end.isAfter(now))
@@ -130,7 +130,7 @@ class HomeViewModel extends ChangeNotifier {
     } catch (_) {
       errorMessage = 'No pudimos cargar tu información. Intenta de nuevo.';
     } finally {
-      await _loadRecommendations();
+      if (!_networkProbe.isCompleted) _networkProbe.complete();
       isLoading = false;
       notifyListeners();
     }
@@ -142,41 +142,56 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> _loadRecommendations() async {
     recommendationsError = null;
 
-    // Cargamos actividades en cache
+    // Mostramos las actividades almacenadas en cache mientras obtenemos la ubicación y consultamos el backend.
     try {
-      recommendations = await _activityService.getCachedActivities();
+      recommendations =
+          await _activityService.getCachedActivities();
 
       recommendationId = null;
       recommendationFreeMinutes = null;
 
       isLoadingRecommendations = recommendations.isEmpty;
       notifyListeners();
-    } catch (_) {
-    }
+    } catch (_) {}
 
     try {
-      final where = await _locationService.current();
-      final watch = Stopwatch()..start();
+      // obtenemos la ubicación del usuario
+      final locationResult = await _locationService.current();
 
-      if (!where.isFallback) {
-        recommendations = await _activityService.getCachedActivities(
-          lat: where.lat,
-          lon: where.lon,
-        );
+      final where = locationResult.location;
 
-        isLoadingRecommendations = false;
-        notifyListeners();
+      // No hacemos consultas cercanas si no tenemos ubicacion
+      if (where == null) {
+        if (recommendations.isEmpty) {
+          recommendationsError =
+              _locationIssueMessage(locationResult.issue);
+        }
+
+        return;
       }
 
+      recommendations =
+          await _activityService.getCachedActivities(
+        lat: where.lat,
+        lon: where.lon,
+      );
+
+      isLoadingRecommendations = false;
+      notifyListeners();
+      
+      // Esperamos la medición de red para enviar networkQuality al backend.
+      await _networkProbe.future;
+
+      // Consultamos al backend para obtener las recomendaciones más recientes
+      final watch = Stopwatch()..start();
       final batch = await _activityService.getRecommendations(
         lat: where.lat,
         lon: where.lon,
+        calculateDistanceLocally: true,
         networkQuality: networkQuality,
-        calculateDistanceLocally: !where.isFallback,
       );
       watch.stop();
 
-      // Remplazamos la cache para que tenga datos mas actualizados
       recommendations = batch.activities;
       recommendationId = batch.recommendationId;
       recommendationFreeMinutes = batch.freeMinutes;
@@ -195,13 +210,15 @@ class HomeViewModel extends ChangeNotifier {
       }
     } catch (_) {
       if (recommendations.isEmpty) {
-        recommendationsError = 'No pudimos cargar las recomendaciones.';
+        recommendationsError =
+            'No pudimos cargar las recomendaciones.';
       }
     } finally {
       isLoadingRecommendations = false;
       notifyListeners();
     }
-  }
+   }
+  
 
   Future<bool> choose(Activity activity) async {
     final id = activity.id;
@@ -236,13 +253,6 @@ class HomeViewModel extends ChangeNotifier {
       if (_connectivityService.isOnline == false) {
         return await _queueJoin(activity);
       }
-      
-      await _activityService.join(
-        id,
-        recommendationId: recommendationId,
-        freeTimeMinutes: recommendationFreeMinutes,
-        networkQuality: networkQuality,
-      );
 
       // Inscripcion normal
       try {
@@ -250,6 +260,7 @@ class HomeViewModel extends ChangeNotifier {
           id,
           recommendationId: recommendationId,
           freeTimeMinutes: recommendationFreeMinutes,
+          networkQuality: networkQuality,
         );
       } catch (error) {
         if (_isRetryableJoinError(error)) {
@@ -419,6 +430,23 @@ class HomeViewModel extends ChangeNotifier {
         .toList();
 
     notifyListeners();
+  }
+
+  String _locationIssueMessage(LocationIssue? issue) {
+    switch (issue) {
+      case LocationIssue.serviceDisabled:
+        return 'Activa la ubicación para encontrar actividades cercanas.';
+
+      case LocationIssue.permissionDenied:
+        return 'No tenemos permiso para acceder a tu ubicación.';
+
+      case LocationIssue.permissionDeniedForever:
+        return 'Habilita el permiso de ubicación desde los ajustes.';
+
+      case LocationIssue.unavailable:
+      case null:
+        return 'No tenemos una ubicación disponible.';
+    }
   }
 
   @override

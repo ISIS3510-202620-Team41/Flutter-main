@@ -5,6 +5,7 @@ import 'analytics/analytics_facade.dart';
 import 'analytics/analytics_navigator_observer.dart';
 import 'analytics/analytics_screen_catalog.dart';
 
+import 'models/activity.dart';
 import 'navigation/app_routes.dart';
 
 import 'screens/dashboard_screen.dart';

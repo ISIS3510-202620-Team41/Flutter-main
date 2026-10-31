@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import '../models/activity_record.dart';
 import '../cache/activity_memory_cache.dart';
@@ -10,6 +11,67 @@ class ActivityLocalRepository {
   final Database _database;
   final ActivityMemoryCache _cache;
 
+  // Notifica cuando cambia la tabla de actividades de la db.
+  final StreamController<void> _changesController =
+      StreamController<void>.broadcast();
+
+  Stream<List<ActivityRecord>> watchAll() {
+    return Stream<List<ActivityRecord>>.multi((controller) {
+      var cancelled = false;
+
+      // Cola para evitar consultas y emisiones desordenadas.
+      Future<void> emissionQueue = Future.value();
+
+      void scheduleSnapshot() {
+        emissionQueue = emissionQueue.then((_) async {
+          if (cancelled) return;
+
+          try {
+            // Obtenemos nuevamente los registros de SQLite.
+            final records = await getAll();
+
+            if (!cancelled) {
+              controller.add(records);
+            }
+          } catch (error, stackTrace) {
+            if (!cancelled) {
+              controller.addError(error, stackTrace);
+            }
+          }
+        });
+      }
+
+      // Escuchamos cambios en la db
+      final subscription = _changesController.stream.listen(
+        (_) => scheduleSnapshot(),
+        onDone: () {
+          emissionQueue = emissionQueue.then((_) async {
+            if (!cancelled) {
+              await controller.close();
+            }
+          });
+        },
+      );
+
+      // Emitimos inicialmente los registros almacenados.
+      scheduleSnapshot();
+
+      controller.onCancel = () async {
+        cancelled = true;
+
+        await subscription.cancel();
+        await emissionQueue;
+      };
+    });
+  }
+
+  // Notifica a todos los suscriptores que hubo un cambio.
+  void _notifyActivitiesChanged() {
+    if (!_changesController.isClosed) {
+      _changesController.add(null);
+    }
+  }
+  
   Future<void> insert(ActivityRecord activity) async {
     await _database.insert(
       'activities',
@@ -17,9 +79,13 @@ class ActivityLocalRepository {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     _cache.put(activity);
+
+    _notifyActivitiesChanged();
   }
 
   Future<void> upsertAll(List<ActivityRecord> activities) async {
+    if (activities.isEmpty) return;
+
     await _database.transaction((txn) async {
       final batch = txn.batch();
 
@@ -34,6 +100,8 @@ class ActivityLocalRepository {
       await batch.commit(noResult: true);
     });
     _cache.putAll(activities);
+
+    _notifyActivitiesChanged();
   }
 
   Future<ActivityRecord?> getById(String id) async {
@@ -89,24 +157,38 @@ class ActivityLocalRepository {
   }
 
   Future<int> update(ActivityRecord activity) async {
-    final count = await _database.update(
+    final rows = await _database.update(
       'activities',
       activity.toMap(),
       where: 'id = ?',
       whereArgs: [activity.id],
     );
-    if (count > 0) _cache.put(activity);
-    return count;
+
+    if (rows > 0) {
+      _cache.put(activity);
+      _notifyActivitiesChanged();
+    }
+
+    return rows;
   }
 
   Future<int> delete(String id) async {
-    final count = await _database.delete(
+    final rows = await _database.delete(
       'activities',
       where: 'id = ?',
       whereArgs: [id],
     );
     _cache.remove(id);
-    return count;
+    if (rows > 0) {
+      _notifyActivitiesChanged();
+    }
+
+    return rows;
   }
-  void clearCache() => _cache.clear();
+  
+   void clearCache() => _cache.clear();
+
+  Future<void> dispose() async {
+    await _changesController.close();
+  }
 }

@@ -4,6 +4,7 @@ import 'package:llamalla/repositories/activity_local_repository.dart';
 
 import '../database/local_database_facade.dart';
 import '../utils/haversine.dart';
+import '../utils/distance_calculator.dart';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
 import 'auth_service.dart';
@@ -43,13 +44,14 @@ class ActivityService {
   ActivityLocalRepository? get _localRepository =>
     _injectedLocalRepository ?? LocalDatabaseFacade.instance.activities;
 
+
   Future<RecommendationBatch> getRecommendations({
     required double lat,
     required double lon,
     double radiusKm = 5,
     String timezone = 'America/Bogota',
-    bool calculateDistanceLocally = true,
     String networkQuality = 'unknown',
+    bool calculateDistanceLocally = true,
   }) async {
     final response = await _authService.authenticatedCachedGet(
       path:
@@ -64,12 +66,15 @@ class ActivityService {
       response.headers['x-free-time-minutes'] ?? '',
     );
 
-    final recommendationId = response.headers['x-recommendation-id'];
+    final recommendationId =
+        response.headers['x-recommendation-id'];
 
     final items = _decodeList(response.body);
 
+    // Pasamos al modelo de ActivityRecord
     final records = items.map((item) {
       final map = Map<String, dynamic>.from(item as Map);
+
       final activityJson =
           Map<String, dynamic>.from(map['activity'] as Map);
 
@@ -78,30 +83,54 @@ class ActivityService {
 
     await _cacheActivities(records);
 
-    final activities = items.map((item) {
+    // Procesamos distancias y radio en el isolate.
+    final processedRecords = calculateDistanceLocally
+        ? await DistanceCalculator.process(
+            records: records,
+            userLat: lat,
+            userLon: lon,
+            radiusKm: radiusKm,
+            filterByRadius: true,
+            sortByDistance: false,
+          )
+        : records;
+
+    final recordsById = {
+      for (final record in processedRecords)
+        record.id: record,
+    };
+
+    final activities = <Activity>[];
+
+    // Se conserva el score y orden de la recomendacion
+    for (final item in items) {
       final map = Map<String, dynamic>.from(item as Map);
 
       final activityJson =
           Map<String, dynamic>.from(map['activity'] as Map);
 
-      final record = ActivityRecord.fromJson(activityJson);
+      final originalRecord =
+          ActivityRecord.fromJson(activityJson);
 
-      final distanceKm = calculateDistanceLocally
-          ? Haversine.calculateDistanceKm(
-              latitude1: lat,
-              longitude1: lon,
-              latitude2: record.latitude,
-              longitude2: record.longitude,
-            )
-          : null;
+      final record = recordsById[originalRecord.id];
 
-      return record.toActivity(
-        score: (map['score'] as num?)?.toDouble(),
-        freeMinutes: freeMinutes,
-        calculatedDistanceKm: distanceKm,
-        recalculateDistance: true,
+      // Puede no existir porque fue descartada por el radio.
+      if (record == null) {
+        continue;
+      }
+
+      activities.add(
+        record.toActivity(
+          score: (map['score'] as num?)?.toDouble(),
+          freeMinutes: freeMinutes,
+          calculatedDistanceKm:
+              calculateDistanceLocally
+                  ? record.distanceKm
+                  : null,
+          recalculateDistance: calculateDistanceLocally,
+        ),
       );
-    }).toList(growable: false);
+    }
 
     return RecommendationBatch(
       activities: activities,
@@ -110,26 +139,40 @@ class ActivityService {
     );
   }
 
-  Future<List<Activity>> getNearby({required double lat, required double lon, double radiusKm = 5, bool calculateDistanceLocally = true,}) async {
-    final response = await _authService.authenticatedCachedGet(
-      path: '/activities?lat=$lat&lon=$lon&radius=$radiusKm',
+  Future<List<Activity>> getNearby({
+    required double lat,
+    required double lon,
+    double radiusKm = 5,
+    bool calculateDistanceLocally = true,
+  }) async {
+    final records = await _fetchNearbyRecords(
+      lat: lat,
+      lon: lon,
+      radiusKm: radiusKm,
     );
-    _check(response, 'load nearby activities');
-
-    final records = _decodeList(response.body)
-        .map((item) => ActivityRecord.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            ),)
-        .toList(growable: false);
 
     await _cacheActivities(records);
 
     return _mapRecordsToActivities(
       records,
-      lat: calculateDistanceLocally ? lat: null,
-      lon: calculateDistanceLocally ? lon: null,
+      lat: calculateDistanceLocally ? lat : null,
+      lon: calculateDistanceLocally ? lon : null,
       radiusKm: radiusKm,
     );
+  }
+
+  Future<void> refreshNearby({
+    required double lat,
+    required double lon,
+    double radiusKm = 5,
+  }) async {
+    final records = await _fetchNearbyRecords(
+      lat: lat,
+      lon: lon,
+      radiusKm: radiusKm,
+    );
+
+    await _cacheActivities(records);
   }
 
   Future<ActivityRecord?> getCachedActivityById(String id) async {
@@ -213,37 +256,42 @@ class ActivityService {
     _check(response, 'join the activity');
   }
 
-  List<Activity> _mapRecordsToActivities(
-    List<ActivityRecord> records, {double? lat, double? lon, double radiusKm = 5,}) {
-    final hasLocation = lat != null && lon != null;
-    final activities = <Activity>[];
-
-    for (final record in records) {
-      final distanceKm = hasLocation
-          ? Haversine.calculateDistanceKm(
-              latitude1: lat,
-              longitude1: lon,
-              latitude2: record.latitude,
-              longitude2: record.longitude,
-            )
-          : null;
-
-      if (hasLocation &&
-          distanceKm != null &&
-          distanceKm > radiusKm) {
-        continue;
-      }
-
-      activities.add(
-        record.toActivity(
-          calculatedDistanceKm: distanceKm,
-          recalculateDistance: true,
-        ),
-      );
+  Future<List<Activity>> _mapRecordsToActivities(
+    List<ActivityRecord> records, {
+    double? lat,
+    double? lon,
+    double radiusKm = 5,
+  }) async {
+    // No location valid no calculamos distancias
+    if (lat == null || lon == null) {
+      return records
+          .map(
+            (record) => record.toActivity(
+              recalculateDistance: true,
+            ),
+          )
+          .toList(growable: false);
     }
 
-    return activities;
+    // Procesamos todo el lote en el isolate.
+    final processedRecords = await DistanceCalculator.process(
+      records: records,
+      userLat: lat,
+      userLon: lon,
+      radiusKm: radiusKm,
+      filterByRadius: true,
+      sortByDistance: true,
+    );
+
+    // ActivityService recibe los registros ya procesados.
+    return processedRecords.map((record) {
+      return record.toActivity(
+        calculatedDistanceKm: record.distanceKm,
+        recalculateDistance: true,
+      );
+    }).toList(growable: false);
   }
+
   List<dynamic> _decodeList(String body) {
     final decoded = jsonDecode(body);
     if (decoded is! List) {
@@ -252,7 +300,7 @@ class ActivityService {
     return decoded;
   }
 
-  Future<List<Activity>> getCachedActivities({double? lat, double? lon, double radiusKm =5, }) async {
+  Future<List<Activity>> getCachedActivities({double? lat, double? lon, double radiusKm = 5,}) async {
     final repository = _localRepository;
 
     if (repository == null) {
@@ -269,6 +317,23 @@ class ActivityService {
     );
   }
 
+  Stream<List<Activity>> watchCachedActivities({double? lat, double? lon, double radiusKm = 5,}) {
+    final repository = _localRepository;
+
+    if (repository == null) {
+      return Stream.value(const <Activity>[]);
+    }
+
+    return repository.watchAll().asyncMap((records) {
+      return _mapRecordsToActivities(
+        records,
+        lat: lat,
+        lon: lon,
+        radiusKm: radiusKm,
+      );
+    });
+  }
+
   Future<void> _cacheActivities(List<ActivityRecord> records,) async {
     final repository = _localRepository;
 
@@ -280,6 +345,26 @@ class ActivityService {
       await repository.upsertAll(records);
     } catch (_) {
     }
+  }
+
+  Future<List<ActivityRecord>> _fetchNearbyRecords({
+    required double lat,
+    required double lon,
+    required double radiusKm,
+  }) async {
+    final response = await _authService.authenticatedCachedGet(
+      path: '/activities?lat=$lat&lon=$lon&radius=$radiusKm',
+    );
+
+    _check(response, 'load nearby activities');
+
+    return _decodeList(response.body)
+        .map(
+          (item) => ActivityRecord.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
+        .toList(growable: false);
   }
 
   void _check(http.Response response, String action) {

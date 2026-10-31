@@ -209,6 +209,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final result = await _scheduleService.getGaps(date: date);
         gaps.add(result);
 
+        final freeRanges = result.free.map((gap) {
+        final start = gap.start.toLocal();
+        final end = gap.end.toLocal();
+
+        return '${_time(start)} - ${_time(end)}';
+        }).join(' | ');
+
+        debugPrint(
+        '[SCHEDULE][GAPS][DATA] '
+        'requested=${date.toString().split(' ').first} '
+        'response=${result.date.toString().split(' ').first} '
+        'timezone=${result.timezone} '
+        'freeCount=${result.free.length} '
+        'ranges=[$freeRanges]',
+      );
+
         debugPrint('[SCHEDULE] Horario cargado: $date');
       } catch (error, stackTrace) {
         debugPrint('[SCHEDULE][ERROR][GAPS] Fecha: $date');
@@ -237,8 +253,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final account = await _authService.googleAccountForCalendar();
 
+      // El backend necesita ambos permisos explícitos: eventos y lista de calendarios.
       const scopes = [
-        'https://www.googleapis.com/auth/calendar.readonly',
+        'https://www.googleapis.com/auth/calendar.events.readonly',
+        'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
       ];
 
       debugPrint('[CALENDAR][3] Solicitando permisos de Calendar');
@@ -263,7 +281,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       debugPrint('[CALENDAR][5] Sincronización aceptada por el backend');
-      debugPrint('[CALENDAR][5] Resultado: $result');
+      debugPrint(
+        '[CALENDAR][5] Resultado: '
+        'importados=${result.imported}, '
+        'ignorados=${result.skippedEvents}, '
+        'calendarios=${result.calendars}',
+      );
 
       await _loadSchedule();
 
@@ -466,11 +489,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final dayGaps = _weekGaps
-        .where((gaps) => gaps.date == _weekdays[selectedDay])
-        .expand((gaps) => gaps.free)
+    final selectedDate = _weekdays[selectedDay];
+    DayGaps? selectedDayGaps;
+
+    for (final gaps in _weekGaps) {
+      if (gaps.date.year == selectedDate.year &&
+          gaps.date.month == selectedDate.month &&
+          gaps.date.day == selectedDate.day) {
+        selectedDayGaps = gaps;
+        break;
+      }
+    }
+
+    // El backend devuelve solamente los intervalos libres. La pantalla calcula
+    // su complemento dentro de la jornada (06:00-22:00) para visualizar también
+    // los periodos ocupados, sin etiquetar todos los intervalos como "LIBRE".
+    final scheduleSegments = _buildScheduleSegments(
+      selectedDate,
+      selectedDayGaps,
+    );
+    final freeIntervals = scheduleSegments
+        .where((segment) => segment.isFree)
+        .map(
+          (segment) => FreeInterval(
+            start: segment.start,
+            end: segment.end,
+          ),
+        )
         .toList(growable: false);
-    final freeWindows = dayGaps.length;
+    final freeWindows = freeIntervals.length;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -601,7 +648,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         statItem(Icons.people, '—', 'Amigos'),
                         statItem(
                           Icons.hourglass_bottom,
-                          _hoursFor(dayGaps),
+                          _hoursFor(freeIntervals),
                           'Horas libres',
                         ),
                       ],
@@ -623,45 +670,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        'Mi horario',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.greenLight,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFBDE8CE)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.circle,
-                              size: 8,
-                              color: AppColors.green,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '$freeWindows ventana libre',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.green,
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Mi horario',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                          ],
+                          ),
+                          const SizedBox(width: 8),
+                          _calendarAction(),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.greenLight,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(0xFFBDE8CE),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.circle,
+                                size: 8,
+                                color: AppColors.green,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$freeWindows espacios libres',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.green,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      _calendarAction(),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -708,8 +769,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }),
                   ),
                   const SizedBox(height: 14),
-                  if (dayGaps.isEmpty) _emptySchedule(),
-                  ...dayGaps.map(classCard),
+                  if (selectedDayGaps == null)
+                    _emptySchedule(
+                      'No fue posible cargar el horario de este día.',
+                    )
+                  else
+                    ...scheduleSegments.map(_scheduleCard),
                 ],
               ),
             ),
@@ -717,6 +782,94 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  List<_ScheduleSegment> _buildScheduleSegments(
+    DateTime date,
+    DayGaps? dayGaps,
+  ) {
+    if (dayGaps == null) return const [];
+
+    // Estos límites corresponden a app.schedule.day-start/day-end del backend.
+    // Si cambias esa configuración, actualiza también estos dos valores.
+    final dayStart = DateTime(date.year, date.month, date.day, 6);
+    final dayEnd = DateTime(date.year, date.month, date.day, 22);
+
+    final freeIntervals = <FreeInterval>[];
+
+    for (final interval in dayGaps.free) {
+      final start = interval.start.isBefore(dayStart)
+          ? dayStart
+          : interval.start;
+      final end = interval.end.isAfter(dayEnd) ? dayEnd : interval.end;
+
+      if (end.isAfter(start)) {
+        freeIntervals.add(FreeInterval(start: start, end: end));
+      }
+    }
+
+    freeIntervals.sort((a, b) => a.start.compareTo(b.start));
+
+    // Normaliza intervalos duplicados o solapados antes de obtener el complemento.
+    final normalizedFree = <FreeInterval>[];
+    for (final interval in freeIntervals) {
+      if (normalizedFree.isEmpty) {
+        normalizedFree.add(interval);
+        continue;
+      }
+
+      final previous = normalizedFree.last;
+      if (!interval.start.isAfter(previous.end)) {
+        final mergedEnd = interval.end.isAfter(previous.end)
+            ? interval.end
+            : previous.end;
+        normalizedFree[normalizedFree.length - 1] = FreeInterval(
+          start: previous.start,
+          end: mergedEnd,
+        );
+      } else {
+        normalizedFree.add(interval);
+      }
+    }
+
+    final segments = <_ScheduleSegment>[];
+    var cursor = dayStart;
+
+    for (final interval in normalizedFree) {
+      if (interval.start.isAfter(cursor)) {
+        segments.add(
+          _ScheduleSegment(
+            start: cursor,
+            end: interval.start,
+            isFree: false,
+          ),
+        );
+      }
+
+      segments.add(
+        _ScheduleSegment(
+          start: interval.start,
+          end: interval.end,
+          isFree: true,
+        ),
+      );
+
+      if (interval.end.isAfter(cursor)) {
+        cursor = interval.end;
+      }
+    }
+
+    if (cursor.isBefore(dayEnd)) {
+      segments.add(
+        _ScheduleSegment(
+          start: cursor,
+          end: dayEnd,
+          isFree: false,
+        ),
+      );
+    }
+
+    return segments;
   }
 
   Widget statItem(IconData icon, String number, String label) {
@@ -787,17 +940,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _emptySchedule() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 36, horizontal: 24),
+  Widget _emptySchedule(String message) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
       child: Column(
         children: [
-          Icon(Icons.event_busy_outlined, size: 36, color: AppColors.grey),
-          SizedBox(height: 10),
+          const Icon(
+            Icons.event_busy_outlined,
+            size: 36,
+            color: AppColors.grey,
+          ),
+          const SizedBox(height: 10),
           Text(
-            'No hay bloques de horario para este día.',
+            message,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: AppColors.grey),
+            style: const TextStyle(fontSize: 14, color: AppColors.grey),
           ),
         ],
       ),
@@ -818,19 +975,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '$hour:$minute';
   }
 
-  Widget classCard(FreeInterval interval) {
+  Widget _scheduleCard(_ScheduleSegment segment) {
+    final isFree = segment.isFree;
+    final accentColor = isFree
+        ? AppColors.green
+        : const Color(0xFFB45309);
+    final backgroundColor = isFree
+        ? AppColors.greenLight
+        : const Color(0xFFFFF4E5);
+    final borderColor = isFree
+        ? const Color(0xFFBDE8CE)
+        : const Color(0xFFF3D2A5);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppColors.greenLight,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFBDE8CE)),
+        border: Border.all(color: borderColor),
       ),
       child: IntrinsicHeight(
         child: Row(
           children: [
-            Container(width: 4, color: AppColors.green),
+            Container(width: 4, color: accentColor),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -840,26 +1008,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Ventana libre',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.green,
+                        Expanded(
+                          child: Text(
+                            isFree ? 'Espacio libre' : 'Horario ocupado',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: accentColor,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.green,
+                            color: accentColor,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text(
-                            'LIBRE',
-                            style: TextStyle(
+                          child: Text(
+                            isFree ? 'LIBRE' : 'OCUPADO',
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
@@ -878,7 +1049,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${_time(interval.start)} - ${_time(interval.end)}',
+                          '${_time(segment.start)} - ${_time(segment.end)}',
                           style: const TextStyle(fontSize: 13),
                         ),
                       ],
@@ -892,6 +1063,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
+
+class _ScheduleSegment {
+  const _ScheduleSegment({
+    required this.start,
+    required this.end,
+    required this.isFree,
+  });
+
+  final DateTime start;
+  final DateTime end;
+  final bool isFree;
 }
 
 class _CalendarSyncSheet extends StatelessWidget {
@@ -950,7 +1133,7 @@ class _CalendarSyncSheet extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             connected
-                ? 'Los intervalos de tu calendario se muestran en modo solo lectura.'
+                ? 'Tus eventos se usan para identificar horarios ocupados y calcular tus espacios libres.'
                 : 'Conecta Google Calendar para calcular tu horario real.',
             style: const TextStyle(fontSize: 13, color: AppColors.grey),
           ),
