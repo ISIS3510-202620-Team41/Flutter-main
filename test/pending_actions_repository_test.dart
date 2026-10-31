@@ -103,4 +103,25 @@ void main() {
     expect(rows, 1);
     expect(result, isNull);
   });
+
+  test('recovers actions left in processing state', () async {
+    await repository.enqueue(action);
+
+    await repository.updateStatus(
+      id: action.id,
+      status: PendingActionStatus.processing,
+    );
+
+    expect(
+      (await repository.getPending('user-1')).single.status,
+      PendingActionStatus.processing,
+    );
+
+    final recovered = await repository.recoverProcessing('user-1');
+
+    final result = await repository.getById(action.id);
+
+    expect(recovered, 1);
+    expect(result!.status, PendingActionStatus.pending);
+  });
 }

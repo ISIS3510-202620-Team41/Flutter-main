@@ -27,11 +27,15 @@ class PendingActionsRepository {
     return PendingAction.fromMap(result.first);
   }
 
-  Future<List<PendingAction>> getPending(String userId,) async {
+  Future<List<PendingAction>> getPending(String userId) async {
     final result = await _database.query(
       'pending_actions',
-      where: 'user_id = ? AND status = ?',
-      whereArgs: [userId, 'PENDING'],
+      where: 'user_id = ? AND status IN (?, ?)',
+      whereArgs: [
+        userId,
+        PendingActionStatus.pending.name.toUpperCase(),
+        PendingActionStatus.processing.name.toUpperCase(),
+      ],
       orderBy: 'created_at ASC',
     );
 
@@ -49,6 +53,21 @@ class PendingActionsRepository {
     return result.map(PendingAction.fromMap).toList();
   }
 
+  Future<int> recoverProcessing(String userId) async {
+    return _database.update(
+      'pending_actions',
+      {
+        'status': 'PENDING',
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      },
+      where: 'user_id = ? AND status = ?',
+      whereArgs: [
+        userId,
+        'PROCESSING',
+      ],
+    );
+  }
+
   Future<int> update(PendingAction action) async {
     return _database.update(
       'pending_actions',
@@ -59,14 +78,19 @@ class PendingActionsRepository {
   }
 
   Future<int> updateStatus({required String id, required PendingActionStatus status, String? lastError, int? attempts,}) async {
+    final values = <String, Object?>{
+      'status': status.name.toUpperCase(),
+      'last_error': lastError,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+
+    if (attempts != null) {
+      values['attempts'] = attempts;
+    }
+
     return _database.update(
       'pending_actions',
-      {
-        'status': status.name.toUpperCase(),
-        'last_error': lastError,
-        'attempts': ?attempts,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      },
+      values,
       where: 'id = ?',
       whereArgs: [id],
     );
