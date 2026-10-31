@@ -119,7 +119,7 @@ void main() {
       });
 
       final client = MockClient(
-        (_) async => throw http.ClientException('Connection refused'),
+            (_) async => throw http.ClientException('Connection refused'),
       );
 
       final restored = await AuthService(

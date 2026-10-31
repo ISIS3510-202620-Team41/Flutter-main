@@ -5,6 +5,7 @@ import 'analytics/analytics_facade.dart';
 import 'analytics/analytics_navigator_observer.dart';
 import 'analytics/analytics_screen_catalog.dart';
 
+import 'models/activity.dart';
 import 'navigation/app_routes.dart';
 
 import 'screens/dashboard_screen.dart';
@@ -18,6 +19,7 @@ import 'theme/app_theme.dart';
 import 'services/connectivity_service.dart';
 import 'widgets/offline_banner.dart';
 import 'services/pending_actions_sync_service.dart';
+import 'models/activity.dart';
 
 class LlamallaApp extends StatefulWidget {
   const LlamallaApp({super.key});
@@ -223,9 +225,12 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                     builder: (_) => const Step1InviteScreen(),
                   );
                 case AppRoutes.activityCreated:
+                  final args = settings.arguments as Map<String, dynamic>;
                   return MaterialPageRoute<void>(
                     settings: settings,
-                    builder: (_) => const ActivityCreatedScreen(),
+                    builder: (_) => ActivityCreatedScreen(activity: args['activity'] as Activity,
+                      friends: args['friends'] as List<String>,
+                      savedOffline: args['savedOffline'] as bool? ?? false,),
                   );
                 case AppRoutes.activityDetail:
                   final activityId = settings.arguments;

@@ -164,7 +164,13 @@ class PendingActionsSyncService {
         throw UnsupportedError(
           'LEAVE_ACTIVITY synchronization is not implemented.',
         );
-    }
+      case PendingActionType.createActivity:
+        // Las actividades creadas sin conexión se sincronizan por su
+        // propio flujo; esta cola todavía no las procesa.
+        throw UnsupportedError(
+          'CREATE_ACTIVITY synchronization is not implemented.',
+            );
+         }
   }
 
   bool _isRetryableError(Object error) {

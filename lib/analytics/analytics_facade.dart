@@ -72,10 +72,12 @@ class AnalyticsFacade {
     });
   }
 
-  Future<void> trackAppLoadingTime({ required String loadType, required Duration duration,}) {
+  Future<void> trackAppLoadingTime({ required String loadType, required Duration duration,String? screen, String? networkQuality,}) {
   return _trackEvent('app_loading_time', {
     'loadType': loadType,
     'durationMs': duration.inMilliseconds,
+    'screen' : ?screen,
+    'networkQuality' : ?networkQuality,
     });
   }
 

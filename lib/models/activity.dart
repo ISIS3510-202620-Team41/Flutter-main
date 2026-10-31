@@ -5,19 +5,15 @@ String categoryLabel(String? backendValue) {
     case 'DEPORTES':
     case 'SPORTS':
       return 'Sports';
-
     case 'ESTUDIO':
     case 'STUDY':
       return 'Study';
-
     case 'CULTURA':
     case 'CULTURE':
       return 'Culture';
-
     case 'ENTRETENIMIENTO':
     case 'ENTERTAINMENT':
       return 'Entertainment';
-
     default:
       return backendValue ?? '';
   }
@@ -35,7 +31,10 @@ String _formatMinutes(int minutes) {
   return rest == 0 ? '$hours h' : '$hours h $rest min';
 }
 
+const localActivityIdPrefix = 'local-';
+
 class Activity {
+  bool get isPendingSync => id?.startsWith(localActivityIdPrefix) ?? false;
   const Activity({
     required this.category,
     required this.name,
@@ -49,6 +48,9 @@ class Activity {
     this.locationName,
     this.score,
     this.localImagePath,
+    this.participants = 0,
+    this.capacity,
+    this.aboutLocation,
   });
 
   final String category;
@@ -63,12 +65,23 @@ class Activity {
   final String? locationName;
   final double? score;
   final String? localImagePath;
+  final int participants;
+  final int? capacity;
+  final String? aboutLocation;
+
+  String get spotsLabel => capacity == null
+      ? '$participants inscritos'
+      : '$participants/$capacity cupos';
+
+  double? get spotsFraction => (capacity == null || capacity == 0)
+      ? null
+      : (participants / capacity!).clamp(0.0, 1.0);
 
   factory Activity.fromJson(
-      Map<String, dynamic> json, {
-        double? score,
-        int? freeMinutes,
-      }) {
+    Map<String, dynamic> json, {
+    double? score,
+    int? freeMinutes,
+  }) {
     final start = DateTime.tryParse(json['startTime'] as String? ?? '');
     final end = DateTime.tryParse(json['endTime'] as String? ?? '');
     final minutes = (start != null && end != null)
@@ -85,10 +98,15 @@ class Activity {
       distance: km == null ? '' : _formatDistance(km),
       duration: minutes == null ? '' : _formatMinutes(minutes),
       price: json['price'] as String? ?? '',
-      people: participants == 1 ? '1 registered' : '$participants registered participants',
-      imageUrl:json['imageUrl'] as String? ?? '',
+      people: participants == 1
+          ? '1 registered'
+          : '$participants registered participants',
+      imageUrl: json['imageUrl'] as String? ?? '',
+      participants: participants,
+      capacity: (json['capacity'] as num?)?.toInt(),
+      aboutLocation: json['aboutLocation'] as String?,
       fitsWindow:
-      freeMinutes == null || minutes == null || minutes <= freeMinutes,
+          freeMinutes == null || minutes == null || minutes <= freeMinutes,
       score: score,
       localImagePath: json['localImagePath'] as String?,
     );

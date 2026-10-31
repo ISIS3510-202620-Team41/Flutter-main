@@ -1,9 +1,19 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../data/mock_data.dart';
 import '../models/activity.dart';
+import '../services/friends_service.dart';
+import '../models/activity_draft.dart';
+import '../repositories/activity_repository.dart';
+import '../services/activity_service.dart';
 
 class FriendsViewModel extends ChangeNotifier {
+  FriendsViewModel({FriendsService? friendsService})
+      : _friendsService = friendsService ?? FriendsService();
+
+  final FriendsService _friendsService;
+
   String query = '';
 
   List<FriendStatus> get visibleFriends {
@@ -18,23 +28,35 @@ class FriendsViewModel extends ChangeNotifier {
     query = value;
     notifyListeners();
   }
+/// Consulta /friends/gaps para que el backend registre el evento "viewed"
+Future<void> load() async {
+  try {
+    await _friendsService.loadAvailableFriends();
+  } catch (_) {
+  }
+}
 }
 
 class ActivityCreationViewModel extends ChangeNotifier {
-  ActivityCreationViewModel({List<String>? initialFriends})
-      : selectedFriends = [...(initialFriends ?? const ['Alex'])];
+  ActivityCreationViewModel({
+    List<String>? initialFriends,
+    ActivityRepository? repository,
+    DateTime Function()? now,
+  })  : selectedFriends = [...(initialFriends ?? const ['Alex'])],
+        _repository = repository ?? ActivityRepository(),
+        _now = now ?? DateTime.now;
+
+  final ActivityRepository _repository;
+  final DateTime Function() _now;
 
   final List<String> selectedFriends;
-  final List<String> categories = const [
-    'Food',
-    'Plays',
-    'Music',
-    'Study',
-    'Sport',
-    'Cultural',
-  ];
-  final List<String> selectedCategories = ['Food'];
-  String selectedPlace = 'Bistro';
+  CategoryOption? selectedCategory;
+  PlaceOption? selectedPlace;
+
+  bool isSubmitting = false;
+  String? errorMessage;
+  Activity? createdActivity;
+  bool savedOffline = false;
 
   void toggleFriend(String friend) {
     selectedFriends.contains(friend)
@@ -43,15 +65,71 @@ class ActivityCreationViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleCategory(String category) {
-    selectedCategories.contains(category)
-        ? selectedCategories.remove(category)
-        : selectedCategories.add(category);
+  void selectCategory(CategoryOption category) {
+    selectedCategory = category;
     notifyListeners();
   }
 
-  void selectPlace(String place) {
+  void selectPlace(PlaceOption place) {
     selectedPlace = place;
     notifyListeners();
+  }
+
+  String? get validationError {
+    if (selectedFriends.isEmpty) return 'Select at least one friend.';
+    if (selectedCategory == null) return 'Choose a type of activity.';
+    if (selectedPlace == null) return 'Choose a place.';
+    return null;
+  }
+
+  bool get canSubmit => validationError == null;
+
+  Future<bool> submit() async {
+    final error = validationError;
+    if (error != null) {
+      errorMessage = error;
+      notifyListeners();
+      return false;
+    }
+
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final result = await _repository.create(_buildDraft());
+      createdActivity = result.activity;
+      savedOffline = result.savedOffline;
+      return true;
+    } on ActivityException catch (error) {
+      errorMessage = error.message;
+      return false;
+    } catch (_) {
+      errorMessage = 'We could not create the activity. Try again.';
+      return false;
+    } finally {
+      isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  ActivityDraft _buildDraft() {
+    final place = selectedPlace!;
+    final category = selectedCategory!;
+    final start = _now().add(const Duration(minutes: 30));
+    return ActivityDraft(
+      clientId: const Uuid().v4(),
+      title: '${category.label} at ${place.name}',
+      category: category.backendValue,
+      startTime: start,
+      endTime: start.add(Duration(minutes: place.durationMinutes)),
+      locationName: place.name,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      friends: List<String>.from(selectedFriends),
+      price: place.price,
+      capacity: place.capacity,
+      aboutLocation: place.description,
+      imageUrl: place.imageUrl,
+    );
   }
 }

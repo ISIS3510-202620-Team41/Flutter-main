@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import '../models/activity_record.dart';
+import '../cache/activity_memory_cache.dart';
+import '../models/activity.dart';
 
 class ActivityLocalRepository {
-  ActivityLocalRepository(this._database);
+  ActivityLocalRepository(this._database, {ActivityMemoryCache? cache})
+      : _cache = cache ?? ActivityMemoryCache();
 
   final Database _database;
+  final ActivityMemoryCache _cache;
 
   // Notifica cuando cambia la tabla de actividades de la db.
   final StreamController<void> _changesController =
@@ -67,13 +71,14 @@ class ActivityLocalRepository {
       _changesController.add(null);
     }
   }
-
+  
   Future<void> insert(ActivityRecord activity) async {
     await _database.insert(
       'activities',
       activity.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _cache.put(activity);
 
     _notifyActivitiesChanged();
   }
@@ -94,11 +99,15 @@ class ActivityLocalRepository {
 
       await batch.commit(noResult: true);
     });
+    _cache.putAll(activities);
 
     _notifyActivitiesChanged();
   }
 
   Future<ActivityRecord?> getById(String id) async {
+    final cached = _cache.get(id);
+    if (cached != null) return cached;
+
     final result = await _database.query(
       'activities',
       where: 'id = ?',
@@ -108,7 +117,9 @@ class ActivityLocalRepository {
 
     if (result.isEmpty) return null;
 
-    return ActivityRecord.fromMap(result.first);
+    final record = ActivityRecord.fromMap(result.first);
+    _cache.put(record);
+    return record;
   }
 
   Future<List<ActivityRecord>> getAll() async {
@@ -133,6 +144,18 @@ class ActivityLocalRepository {
     return result.map(ActivityRecord.fromMap).toList();
   }
 
+  /// Activities created offline that were not sent to the backend yet.
+  Future<List<ActivityRecord>> getPendingSync() async {
+    final result = await _database.query(
+      'activities',
+      where: 'id LIKE ?',
+      whereArgs: ['$localActivityIdPrefix%'],
+      orderBy: 'start_time ASC',
+    );
+
+    return result.map(ActivityRecord.fromMap).toList();
+  }
+
   Future<int> update(ActivityRecord activity) async {
     final rows = await _database.update(
       'activities',
@@ -142,6 +165,7 @@ class ActivityLocalRepository {
     );
 
     if (rows > 0) {
+      _cache.put(activity);
       _notifyActivitiesChanged();
     }
 
@@ -154,13 +178,15 @@ class ActivityLocalRepository {
       where: 'id = ?',
       whereArgs: [id],
     );
-
+    _cache.remove(id);
     if (rows > 0) {
       _notifyActivitiesChanged();
     }
 
     return rows;
   }
+  
+   void clearCache() => _cache.clear();
 
   Future<void> dispose() async {
     await _changesController.close();

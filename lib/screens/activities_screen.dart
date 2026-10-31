@@ -8,6 +8,9 @@ import '../widgets/header.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/map_preview.dart';
 import '../viewmodels/activity_view_models.dart';
+import '../widgets/pending_sync_badge.dart';
+import '../widgets/category_preferences_sheet.dart';
+
 
 class ActivitiesScreen extends StatefulWidget {
   const ActivitiesScreen({super.key, this.onOpenDetail});
@@ -57,12 +60,27 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
 
                     const SizedBox(height: 18),
 
-                    const Text(
-                      'Actividades cerca de ti',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Actividades cerca de ti',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () =>
+                              showCategoryPreferencesSheet(context),
+                          icon: const Icon(Icons.tune, size: 16),
+                          label: const Text(
+                            'Mis categorías',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 10),
@@ -390,6 +408,10 @@ class _ActivityRow extends StatelessWidget {
                   ),
 
                   const SizedBox(height: 5),
+                  if (activity.isPendingSync) ...[
+                    const SizedBox(height: 5),
+                    const PendingSyncBadge(),
+                  ],
 
                   Wrap(
                     spacing: 8,

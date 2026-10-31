@@ -110,6 +110,10 @@ class _ActivityService extends ActivityService {
   String? joinedId;
   String? joinedRecommendationId;
   int? joinedFreeMinutes;
+  bool failJoin = false;
+  String? joinedNetworkQuality;
+  String? joinedSource;
+  String? requestedNetworkQuality;
 
   int joinCalls = 0;
 
@@ -121,6 +125,7 @@ class _ActivityService extends ActivityService {
     required double lon,
     double radiusKm = 50,
     String timezone = 'America/Bogota',
+    String networkQuality = 'unknown',
     bool calculateDistanceLocally = true,
   }) async {
     return const RecommendationBatch(
@@ -146,6 +151,8 @@ class _ActivityService extends ActivityService {
     String activityId, {
     String? recommendationId,
     int? freeTimeMinutes,
+    String? networkQuality,
+    String? source,
   }) async {
     joinCalls++;
 
@@ -156,6 +163,8 @@ class _ActivityService extends ActivityService {
     joinedId = activityId;
     joinedRecommendationId = recommendationId;
     joinedFreeMinutes = freeTimeMinutes;
+    joinedNetworkQuality = networkQuality;
+    joinedSource = source;
   }
 }
 

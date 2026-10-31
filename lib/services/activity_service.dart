@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:llamalla/repositories/activity_local_repository.dart';
 
 import '../database/local_database_facade.dart';
+import '../utils/haversine.dart';
 import '../utils/distance_calculator.dart';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
@@ -51,12 +52,14 @@ class ActivityService {
     required double lon,
     double radiusKm = 50,
     String timezone = 'America/Bogota',
+    String networkQuality = 'unknown',
     bool calculateDistanceLocally = true,
   }) async {
     final response = await _authService.authenticatedCachedGet(
       path:
           '/activities/recommendations?lat=$lat&lon=$lon&radius=$radiusKm'
-          '&tz=${Uri.encodeQueryComponent(timezone)}',
+          '&tz=${Uri.encodeQueryComponent(timezone)}'
+          '&networkQuality=$networkQuality',
     );
 
     _check(response, 'load the recommendations');
@@ -210,18 +213,45 @@ class ActivityService {
     return cachedRecord ?? record;
   }
 
+  Future<List<Activity>> getPendingActivities() async {
+    final repository = _localRepository;
+    if (repository == null) return [];
+
+    final records = await repository.getPendingSync();
+    return records.map((record) => record.toActivity()).toList(growable: false);
+  }
+  Future<Activity> createActivity(
+      Map<String, dynamic> body, {
+        String? source,
+      }) async {
+    final query = source == null ? '' : '?source=$source';
+    final response = await _authService.authenticatedRequest(
+      method: 'POST',
+      path: '/activities$query',
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _check(response, 'create the activity');
+
+    final record = ActivityRecord.fromJson(
+      Map<String, dynamic>.from(jsonDecode(response.body) as Map),
+    );
+    await _cacheActivities([record]);
+    return record.toActivity();
+  }
+
   Future<void> join(
       String activityId, {
         String? recommendationId,
         int? freeTimeMinutes,
+        String? networkQuality,
+        String? source,
       }) async {
     final query = <String, String>{};
-    if (recommendationId != null) {
-      query['recommendationId'] = recommendationId;
-    }
-    if (freeTimeMinutes != null) {
-      query['freeTimeMinutes'] = '$freeTimeMinutes';
-    }
+    if (recommendationId != null) query['recommendationId'] = recommendationId;
+    if (freeTimeMinutes != null) query['freeTimeMinutes'] = '$freeTimeMinutes';
+    if (networkQuality != null) query['networkQuality'] = networkQuality;
+    if (source != null) query['source'] = source;
     final queryString =
     query.isEmpty ? '' : '?${Uri(queryParameters: query).query}';
 
