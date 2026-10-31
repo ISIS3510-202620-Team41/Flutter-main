@@ -5,6 +5,7 @@ import 'analytics/analytics_facade.dart';
 import 'analytics/analytics_navigator_observer.dart';
 import 'analytics/analytics_screen_catalog.dart';
 
+import 'models/activity.dart';
 import 'navigation/app_routes.dart';
 
 import 'screens/dashboard_screen.dart';
@@ -164,9 +165,12 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                     builder: (_) => const Step1InviteScreen(),
                   );
                 case AppRoutes.activityCreated:
+                  final args = settings.arguments as Map<String, dynamic>;
                   return MaterialPageRoute<void>(
                     settings: settings,
-                    builder: (_) => const ActivityCreatedScreen(),
+                    builder: (_) => ActivityCreatedScreen(activity: args['activity'] as Activity,
+                      friends: args['friends'] as List<String>,
+                      savedOffline: args['savedOffline'] as bool? ?? false,),
                   );
                 case AppRoutes.activityDetail:
                   return MaterialPageRoute<void>(
