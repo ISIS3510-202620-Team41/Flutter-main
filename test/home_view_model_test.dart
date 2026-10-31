@@ -161,8 +161,11 @@ class _ActivityService extends ActivityService {
 
 class _LocationService extends LocationService {
   @override
-  Future<UserLocation> current() async =>
-      const UserLocation(4.6, -74.08);
+  Future<LocationResult> current() async {
+    return LocationResult(
+      location: const UserLocation(4.6, -74.08),
+    );
+  }
 }
 
 PendingAction _pendingAction({

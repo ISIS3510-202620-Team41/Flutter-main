@@ -30,6 +30,7 @@ class LocalDatabaseService {
   }
 
   Future<void> close() async {
+    await activities.dispose();
     await database.close();
   }
 }
