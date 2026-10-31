@@ -201,9 +201,13 @@ class ActivityService {
       Map<String, dynamic>.from(decoded),
     );
 
+    // Guardamos la actividad y descargamos su imagen.
     await _cacheActivities([record]);
 
-    return record;
+    // Recuperamos desde SQLite la versión que ya contiene localImagePath.
+    final cachedRecord = await _localRepository?.getById(id);
+
+    return cachedRecord ?? record;
   }
 
   Future<void> join(
@@ -272,7 +276,11 @@ class ActivityService {
     return decoded;
   }
 
-  Future<List<Activity>> getCachedActivities({double? lat, double? lon, double radiusKm = 50,}) async {
+  Future<List<Activity>> getCachedActivities({
+    double? lat,
+    double? lon,
+    double radiusKm = 50,
+  }) async {
     final repository = _localRepository;
 
     if (repository == null) {
@@ -319,36 +327,32 @@ class ActivityService {
       final updatedRecords = <ActivityRecord>[];
 
       for (final record in records) {
-        // Recuperamos la versión anterior de SQLite.
         final previous = await repository.getById(record.id);
 
-        String? localPath;
+        String? localPath = previous?.localImagePath;
 
-        // Si tiene URL, intentamos descargar la imagen.
-        if (record.imageUrl != null &&
-            record.imageUrl!.isNotEmpty) {
-          localPath = await _imageCache.downloadAndCache(
+        final imageUrl = record.imageUrl?.trim() ?? '';
+
+        if (imageUrl.isNotEmpty) {
+          final downloadedPath = await _imageCache.downloadAndCache(
             activityId: record.id,
-            imageUrl: record.imageUrl!,
+            imageUrl: imageUrl,
           );
+
+          if (downloadedPath != null) {
+            localPath = downloadedPath;
+          }
         }
 
-        // Si falla la descarga, conservamos la imagen anterior.
-        localPath ??= previous?.localImagePath;
-
         updatedRecords.add(
-          record.copyWith(
-            localImagePath: localPath,
-          ),
+          record.copyWith(localImagePath: localPath),
         );
       }
 
       await repository.upsertAll(updatedRecords);
-
-    } catch (_) {
+    } catch (_) { 
     }
   }
-
 
   Future<List<ActivityRecord>> _fetchNearbyRecords({
     required double lat,
