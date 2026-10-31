@@ -30,6 +30,7 @@ String _formatMinutes(int minutes) {
   final rest = minutes % 60;
   return rest == 0 ? '$hours h' : '$hours h $rest min';
 }
+
 const localActivityIdPrefix = 'local-';
 
 class Activity {
@@ -46,6 +47,7 @@ class Activity {
     this.id,
     this.locationName,
     this.score,
+    this.localImagePath,
     this.participants = 0,
     this.capacity,
     this.aboutLocation,
@@ -62,6 +64,7 @@ class Activity {
   final String? id;
   final String? locationName;
   final double? score;
+  final String? localImagePath;
   final int participants;
   final int? capacity;
   final String? aboutLocation;
@@ -75,10 +78,10 @@ class Activity {
       : (participants / capacity!).clamp(0.0, 1.0);
 
   factory Activity.fromJson(
-      Map<String, dynamic> json, {
-        double? score,
-        int? freeMinutes,
-      }) {
+    Map<String, dynamic> json, {
+    double? score,
+    int? freeMinutes,
+  }) {
     final start = DateTime.tryParse(json['startTime'] as String? ?? '');
     final end = DateTime.tryParse(json['endTime'] as String? ?? '');
     final minutes = (start != null && end != null)
@@ -95,14 +98,17 @@ class Activity {
       distance: km == null ? '' : _formatDistance(km),
       duration: minutes == null ? '' : _formatMinutes(minutes),
       price: json['price'] as String? ?? '',
-      people: participants == 1 ? '1 registered' : '$participants registered participants',
+      people: participants == 1
+          ? '1 registered'
+          : '$participants registered participants',
       imageUrl: json['imageUrl'] as String? ?? '',
       participants: participants,
       capacity: (json['capacity'] as num?)?.toInt(),
       aboutLocation: json['aboutLocation'] as String?,
       fitsWindow:
-      freeMinutes == null || minutes == null || minutes <= freeMinutes,
+          freeMinutes == null || minutes == null || minutes <= freeMinutes,
       score: score,
+      localImagePath: json['localImagePath'] as String?,
     );
   }
 }

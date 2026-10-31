@@ -134,12 +134,6 @@ class AuthService {
     }
   }
 
-  //Conserva los tokens guardados para que la aplicación pueda abrirse y funcionar con los datos locales.
-  bool _keepSavedSession(SharedPreferences preferences) {
-    final accessToken = preferences.getString('access_token');
-    return accessToken != null && accessToken.isNotEmpty;
-  }
-
   Future<AuthResult> refresh() async {
     final preferences = await SharedPreferences.getInstance();
     final refreshToken = preferences.getString('refresh_token');

@@ -2,17 +2,12 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 class AppDatabase {
-  AppDatabase({
-    sqflite.DatabaseFactory? databaseFactory,
-    this._databasePath,
-  })  : _databaseFactory =
-      databaseFactory ?? sqflite.databaseFactory;
+  AppDatabase({sqflite.DatabaseFactory? databaseFactory, this._databasePath})
+    : _databaseFactory = databaseFactory ?? sqflite.databaseFactory;
 
   static const String databaseName = 'llamalla.db';
   static const int databaseVersion = 2;
 
-  // pending_actions is defined once and used by onCreate and onUpgrade, so a
-  // new install and a migrated install end up with the same table.
   static const _createPendingActionsTable = '''
     CREATE TABLE pending_actions (
       id TEXT PRIMARY KEY,
@@ -55,11 +50,8 @@ class AppDatabase {
       return _database!;
     }
 
-    final path = _databasePath ??
-        p.join(
-          await sqflite.getDatabasesPath(),
-          databaseName,
-        );
+    final path =
+        _databasePath ?? p.join(await sqflite.getDatabasesPath(), databaseName);
 
     _database = await _databaseFactory.openDatabase(
       path,
@@ -78,10 +70,7 @@ class AppDatabase {
     await db.execute('PRAGMA foreign_keys = ON');
   }
 
-  Future<void> _onCreate(
-      sqflite.Database db,
-      int version,
-      ) async {
+  Future<void> _onCreate(sqflite.Database db, int version) async {
     await db.execute('''
       CREATE TABLE activities (
         id TEXT PRIMARY KEY,
@@ -94,6 +83,7 @@ class AppDatabase {
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
         image_url TEXT,
+        local_image_path TEXT,
         price TEXT,
         capacity INTEGER,
         about_location TEXT,
@@ -130,11 +120,15 @@ class AppDatabase {
 
   /// Actualiza incrementalmente los schemas
   Future<void> _onUpgrade(
-      sqflite.Database db,
-      int oldVersion,
-      int newVersion,
-      ) async {
+    sqflite.Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     if (oldVersion < 2) {
+      await db.execute('''
+        ALTER TABLE activities
+        ADD COLUMN local_image_path TEXT
+      ''');
       // v2: pending_actions accepts CREATE_ACTIVITY. SQLite cannot change a
       // CHECK constraint, so the table is rebuilt and its rows are copied.
       await db.execute(

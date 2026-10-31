@@ -8,7 +8,7 @@ class DistanceCalculator {
     required List<ActivityRecord> records,
     required double userLat,
     required double userLon,
-    double radiusKm = 5,
+    double radiusKm = 50,
     bool filterByRadius = true,
     bool sortByDistance = true,
   }) async {

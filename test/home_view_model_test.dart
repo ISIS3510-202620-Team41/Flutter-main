@@ -123,7 +123,7 @@ class _ActivityService extends ActivityService {
   Future<RecommendationBatch> getRecommendations({
     required double lat,
     required double lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
     String timezone = 'America/Bogota',
     String networkQuality = 'unknown',
     bool calculateDistanceLocally = true,

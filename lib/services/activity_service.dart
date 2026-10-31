@@ -3,10 +3,10 @@ import 'package:http/http.dart' as http;
 import 'package:llamalla/repositories/activity_local_repository.dart';
 
 import '../database/local_database_facade.dart';
-import '../utils/haversine.dart';
 import '../utils/distance_calculator.dart';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
+import 'activity_image_cache_service.dart';
 import 'auth_service.dart';
 
 class ActivityException implements Exception {
@@ -40,7 +40,8 @@ class ActivityService {
 
   final AuthService _authService;
   final ActivityLocalRepository? _injectedLocalRepository;
-
+  final ActivityImageCacheService _imageCache = ActivityImageCacheService();
+  
   ActivityLocalRepository? get _localRepository =>
     _injectedLocalRepository ?? LocalDatabaseFacade.instance.activities;
 
@@ -48,7 +49,7 @@ class ActivityService {
   Future<RecommendationBatch> getRecommendations({
     required double lat,
     required double lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
     String timezone = 'America/Bogota',
     String networkQuality = 'unknown',
     bool calculateDistanceLocally = true,
@@ -142,7 +143,7 @@ class ActivityService {
   Future<List<Activity>> getNearby({
     required double lat,
     required double lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
     bool calculateDistanceLocally = true,
   }) async {
     final records = await _fetchNearbyRecords(
@@ -164,7 +165,7 @@ class ActivityService {
   Future<void> refreshNearby({
     required double lat,
     required double lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
   }) async {
     final records = await _fetchNearbyRecords(
       lat: lat,
@@ -202,9 +203,13 @@ class ActivityService {
       Map<String, dynamic>.from(decoded),
     );
 
+    // Guardamos la actividad y descargamos su imagen.
     await _cacheActivities([record]);
 
-    return record;
+    // Recuperamos desde SQLite la versión que ya contiene localImagePath.
+    final cachedRecord = await _localRepository?.getById(id);
+
+    return cachedRecord ?? record;
   }
 
   Future<List<Activity>> getPendingActivities() async {
@@ -260,7 +265,7 @@ class ActivityService {
     List<ActivityRecord> records, {
     double? lat,
     double? lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
   }) async {
     // No location valid no calculamos distancias
     if (lat == null || lon == null) {
@@ -300,7 +305,11 @@ class ActivityService {
     return decoded;
   }
 
-  Future<List<Activity>> getCachedActivities({double? lat, double? lon, double radiusKm = 5,}) async {
+  Future<List<Activity>> getCachedActivities({
+    double? lat,
+    double? lon,
+    double radiusKm = 50,
+  }) async {
     final repository = _localRepository;
 
     if (repository == null) {
@@ -317,7 +326,7 @@ class ActivityService {
     );
   }
 
-  Stream<List<Activity>> watchCachedActivities({double? lat, double? lon, double radiusKm = 5,}) {
+  Stream<List<Activity>> watchCachedActivities({double? lat, double? lon, double radiusKm = 50,}) {
     final repository = _localRepository;
 
     if (repository == null) {
@@ -334,7 +343,9 @@ class ActivityService {
     });
   }
 
-  Future<void> _cacheActivities(List<ActivityRecord> records,) async {
+  Future<void> _cacheActivities(
+    List<ActivityRecord> records,
+  ) async {
     final repository = _localRepository;
 
     if (repository == null || records.isEmpty) {
@@ -342,8 +353,33 @@ class ActivityService {
     }
 
     try {
-      await repository.upsertAll(records);
-    } catch (_) {
+      final updatedRecords = <ActivityRecord>[];
+
+      for (final record in records) {
+        final previous = await repository.getById(record.id);
+
+        String? localPath = previous?.localImagePath;
+
+        final imageUrl = record.imageUrl?.trim() ?? '';
+
+        if (imageUrl.isNotEmpty) {
+          final downloadedPath = await _imageCache.downloadAndCache(
+            activityId: record.id,
+            imageUrl: imageUrl,
+          );
+
+          if (downloadedPath != null) {
+            localPath = downloadedPath;
+          }
+        }
+
+        updatedRecords.add(
+          record.copyWith(localImagePath: localPath),
+        );
+      }
+
+      await repository.upsertAll(updatedRecords);
+    } catch (_) { 
     }
   }
 

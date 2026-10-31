@@ -123,7 +123,7 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                   child: ListView(
                     children: availablePlaces.map((place) {
                       final isActive =
-                          _viewModel.selectedPlace == place.name;
+                          _viewModel.selectedPlace?.name == place.name;
                       return GestureDetector(
                         onTap: () => _viewModel.selectPlace(place),
                         child: Container(

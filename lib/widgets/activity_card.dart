@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:llamalla/widgets/pending_sync_badge.dart';
 
@@ -29,10 +30,13 @@ class ActivityCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Hero image with the category and price chips on top.
           Stack(
             children: [
-              _ActivityImage(url: activity.imageUrl, height: compact ? 90 : 130),
+              _ActivityImage(
+                url: activity.imageUrl,
+                localPath: activity.localImagePath,
+                height: compact ? 72 : 106,
+              ),
               Positioned(
                 left: 10,
                 top: 10,
@@ -66,12 +70,17 @@ class ActivityCard extends StatelessWidget {
                       child: Text(
                         activity.name,
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w700),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     if (activity.fitsWindow)
-                      const Icon(Icons.check_circle,
-                          size: 16, color: AppColors.green),
+                      const Icon(
+                        Icons.check_circle,
+                        size: 16,
+                        color: AppColors.green,
+                      ),
                   ],
                 ),
                 if (venue.isNotEmpty) ...[
@@ -90,12 +99,17 @@ class ActivityCard extends StatelessWidget {
                   children: [
                     if (activity.distance.isNotEmpty)
                       InfoChip(
-                          icon: Icons.location_on_outlined,
-                          text: activity.distance),
+                        icon: Icons.location_on_outlined,
+                        text: activity.distance,
+                      ),
                     InfoChip(
-                        icon: Icons.schedule_outlined, text: activity.duration),
+                      icon: Icons.schedule_outlined,
+                      text: activity.duration,
+                    ),
                     InfoChip(
-                        icon: Icons.group_outlined, text: activity.spotsLabel),
+                      icon: Icons.group_outlined,
+                      text: activity.spotsLabel,
+                    ),
                   ],
                 ),
                 if (fraction != null) ...[
@@ -120,10 +134,8 @@ class ActivityCard extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.rosewood,
                       foregroundColor: AppColors.white,
-                      disabledBackgroundColor:
-                          AppColors.greenLight,
-                      disabledForegroundColor:
-                          AppColors.green,
+                      disabledBackgroundColor: AppColors.greenLight,
+                      disabledForegroundColor: AppColors.green,
                       minimumSize: const Size.fromHeight(34),
                       padding: const EdgeInsets.symmetric(vertical: 7),
                     ),
@@ -168,28 +180,51 @@ class _Pill extends StatelessWidget {
 }
 
 class _ActivityImage extends StatelessWidget {
-  const _ActivityImage({required this.url, required this.height});
+  const _ActivityImage({
+    required this.url,
+    required this.height,
+    this.localPath,
+  });
 
   final String url;
+  final String? localPath;
   final double height;
-
-  Widget get _placeholder => Container(
-    color: AppColors.blue.withValues(alpha: 0.30),
-    child: const Center(child: Icon(Icons.image_outlined, size: 34)),
-  );
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    if (localPath?.isNotEmpty ?? false) {
+      return Image.file(
+        File(localPath!),
+        height: height,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _networkImage(),
+      );
+    }
+
+    return _networkImage();
+  }
+
+  Widget _networkImage() {
+    if (url.isEmpty) {
+      return _fallback();
+    }
+
+    return Image.network(
+      url,
       height: height,
       width: double.infinity,
-      child: url.isEmpty
-          ? _placeholder
-          : Image.network(
-        url, // #31 will swap this for CachedNetworkImage
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _placeholder,
-      ),
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _fallback(),
+    );
+  }
+
+  Widget _fallback() {
+    return Container(
+      height: height,
+      width: double.infinity,
+      color: AppColors.blue.withValues(alpha: 0.30),
+      child: const Center(child: Icon(Icons.broken_image_outlined)),
     );
   }
 }
