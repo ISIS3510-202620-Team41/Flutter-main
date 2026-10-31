@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 

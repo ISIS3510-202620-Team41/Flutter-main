@@ -3,7 +3,6 @@ import 'package:http/http.dart' as http;
 import 'package:llamalla/repositories/activity_local_repository.dart';
 
 import '../database/local_database_facade.dart';
-import '../utils/haversine.dart';
 import '../utils/distance_calculator.dart';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
