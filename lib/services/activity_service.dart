@@ -55,7 +55,7 @@ class ActivityService {
     final response = await _authService.authenticatedCachedGet(
       path:
           '/activities/recommendations?lat=$lat&lon=$lon&radius=$radiusKm'
-          '&tz=${Uri.encodeQueryComponent(timezone)}',
+          '&tz=${Uri.encodeQueryComponent(timezone)}'
           '&networkQuality=$networkQuality',
     );
 

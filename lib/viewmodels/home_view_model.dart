@@ -75,6 +75,7 @@ class HomeViewModel extends ChangeNotifier {
   String? actionMessage;
   String networkQuality = 'unknown';
 
+  Completer<void> _networkProbe = Completer<void>();
   String get greetingName {
     final name = profile?.name.trim() ?? '';
     return name.isEmpty ? 'allí' : name.split(RegExp(r'\s+')).first;

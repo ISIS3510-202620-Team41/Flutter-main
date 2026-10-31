@@ -71,13 +71,6 @@ class ActivityLocalRepository {
     }
   }
   
-  // Notifica a todos los suscriptores que hubo un cambio.
-  void _notifyActivitiesChanged() {
-    if (!_changesController.isClosed) {
-      _changesController.add(null);
-    }
-  }
-  
   Future<void> insert(ActivityRecord activity) async {
     await _database.insert(
       'activities',
@@ -159,6 +152,7 @@ class ActivityLocalRepository {
     );
 
     if (rows > 0) {
+      _cache.put(activity);
       _notifyActivitiesChanged();
     }
 
