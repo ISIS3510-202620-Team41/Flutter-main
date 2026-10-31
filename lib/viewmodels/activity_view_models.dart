@@ -5,16 +5,29 @@ import '../models/activity.dart';
 import '../services/activity_service.dart';
 import '../services/location_service.dart';
 import '../models/activity_record.dart';
+import '../services/connectivity_service.dart';
 
 class ActivitiesViewModel extends ChangeNotifier {
   ActivitiesViewModel({
     ActivityService? activityService,
     LocationService? locationService,
+    ConnectivityService? connectivityService,
   })  : _activityService = activityService ?? ActivityService(),
-        _locationService = locationService ?? LocationService();
+        _locationService = locationService ?? LocationService(),
+        _connectivityService = connectivityService ?? ConnectivityService.instance;
 
   final ActivityService _activityService;
   final LocationService _locationService;
+  final ConnectivityService _connectivityService;
+
+  Stream<List<Activity>>? _activitiesStream;
+
+  LocationIssue? locationIssue;
+
+  Stream<List<Activity>> get activitiesStream =>
+      _activitiesStream ?? const Stream<List<Activity>>.empty();
+
+  List<Activity> get activities => _activities;
 
   static const allCategories = 'Todas';
   static const categories = [allCategories, ...activityCategoryLabels];
@@ -26,64 +39,85 @@ class ActivitiesViewModel extends ChangeNotifier {
   bool isLoading = true;
   String? errorMessage;
 
-  List<Activity> get visibleActivities {
+  List<Activity> get visibleActivities =>
+      filterActivities(_activities);
+
+  List<Activity> filterActivities(List<Activity> source) {
     final normalizedQuery = query.trim().toLowerCase();
-    return _activities
-        .where((activity) {
-          final matchesCategory =
-              selectedCategory == allCategories||
-              activity.category.toLowerCase() == selectedCategory.toLowerCase();
-          final matchesQuery =
-              normalizedQuery.isEmpty ||
-              activity.name.toLowerCase().contains(normalizedQuery);
-          return matchesCategory && matchesQuery;
-        })
-        .toList(growable: false);
+
+    return source.where((activity) {
+      final matchesCategory =
+          selectedCategory == allCategories ||
+          activity.category.toLowerCase() ==
+              selectedCategory.toLowerCase();
+
+      final matchesQuery =
+          normalizedQuery.isEmpty ||
+          activity.name.toLowerCase().contains(normalizedQuery);
+
+      return matchesCategory && matchesQuery;
+    }).toList(growable: false);
   }
 
   Future<void> load() async {
     errorMessage = null;
-
     isLoading = true;
-    errorMessage = null;
+
     notifyListeners();
-    try {
-      _activities = await _activityService.getCachedActivities();
-
-      if (_activities.isNotEmpty) {
-        isLoading = false;
-        notifyListeners();
-      }
-    } catch (_) {
-      // Continuamos con la recuperacion remota de actividades
-    }
 
     try {
-      final where = await _locationService.current();
+      // Obtener la ubicacion del usuario
+      final locationResult = await _locationService.current();
 
-      if (!where.isFallback) {
-        final nearbyCached = await _activityService.getCachedActivities(
-          lat: where.lat,
-          lon: where.lon,
-        );
-        _activities = nearbyCached;
-        isLoading = false;
-        notifyListeners();
+      locationIssue = locationResult.issue;
+
+      final where = locationResult.location;
+
+      _activitiesStream =
+          _activityService.watchCachedActivities(
+        lat: where?.lat,
+        lon: where?.lon,
+      );
+
+      notifyListeners();
+
+      // No calculamos las distancias si no tenemos ubicacion
+      if (where == null) {
+        _activities = await _activityService.getCachedActivities();
+
+        if (_activities.isEmpty) {
+          errorMessage =
+              'No hay actividades almacenadas ni ubicación disponible.';
+        }
+
+        return;
       }
 
-      final updatedActivites = await _activityService.getNearby(
+      // Recuperar actividades cercanas desde SQLite
+      _activities = await _activityService.getCachedActivities(
         lat: where.lat,
         lon: where.lon,
       );
 
-      _activities = updatedActivites;
+      if (_connectivityService.isOnline == false) {
+        return;
+      }
+
+      await _activityService.refreshNearby(
+        lat: where.lat,
+        lon: where.lon,
+      );
+
       errorMessage = null;
     } on ActivityException catch (error) {
-        if (_activities.isEmpty) {
-        errorMessage = error.message;}
+      if (_activities.isEmpty) {
+        errorMessage = error.message;
+      }
     } catch (_) {
       if (_activities.isEmpty) {
-      errorMessage = 'No pudimos cargar las actividades cercanas.';}
+        errorMessage =
+            'No pudimos cargar las actividades cercanas.';
+      }
     } finally {
       isLoading = false;
       notifyListeners();
