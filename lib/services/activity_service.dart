@@ -7,6 +7,7 @@ import '../utils/haversine.dart';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
 import 'auth_service.dart';
+import 'session_store.dart';
 
 class ActivityException implements Exception {
   const ActivityException(this.message, {this.statusCode});
@@ -56,8 +57,6 @@ class ActivityService {
           '/activities/recommendations?lat=$lat&lon=$lon&radius=$radiusKm'
           '&tz=${Uri.encodeQueryComponent(timezone)}'
           '&networkQuality=$networkQuality',
-          '/activities/recommendations?lat=$lat&lon=$lon&radius=$radiusKm'
-          '&tz=${Uri.encodeQueryComponent(timezone)}',
     );
 
     _check(response, 'load the recommendations');
@@ -172,6 +171,25 @@ class ActivityService {
 
     final records = await repository.getPendingSync();
     return records.map((record) => record.toActivity()).toList(growable: false);
+  }
+  Future<Activity> createActivity(
+      Map<String, dynamic> body, {
+        String? source,
+      }) async {
+    final query = source == null ? '' : '?source=$source';
+    final response = await _authService.authenticatedRequest(
+      method: 'POST',
+      path: '/activities$query',
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _check(response, 'create the activity');
+
+    final record = ActivityRecord.fromJson(
+      Map<String, dynamic>.from(jsonDecode(response.body) as Map),
+    );
+    await _cacheActivities([record]);
+    return record.toActivity();
   }
 
   Future<void> join(

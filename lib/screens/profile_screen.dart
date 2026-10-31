@@ -8,6 +8,7 @@ import '../services/schedule_service.dart';
 import '../theme/app_theme.dart';
 import '../viewmodels/profile_view_model.dart';
 import 'edit_profile_sheet.dart';
+import '../services/photo_storage_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -107,7 +108,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         preferredCameraDevice: CameraDevice.front,
       );
       if (photo == null) return null; // el usuario canceló
-      final profile = await _profileViewModel.uploadAvatar(photo.path);
+      // Se crea una copia privada
+      final saved = await PhotoStorageService().savePhoto(photo.path);
+      final profile = await _profileViewModel.uploadAvatar(saved.path);
       if (mounted && profile != null) setState(() => _profile = profile);
       if (profile == null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

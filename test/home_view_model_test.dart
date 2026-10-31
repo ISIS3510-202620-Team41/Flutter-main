@@ -126,7 +126,7 @@ class _ActivityService extends ActivityService {
     double radiusKm = 5,
     String timezone = 'America/Bogota',
     bool calculateDistanceLocally = true,
-    String networkQuality = 'unknown',
+    String networkQuality = 'unknown'
   }) async {
     return const RecommendationBatch(
       activities: [
@@ -147,17 +147,17 @@ class _ActivityService extends ActivityService {
   }
 
   @override
-  Future<void> join(
-    String activityId, {
+  Future<void> join(String activityId, {
     String? recommendationId,
     int? freeTimeMinutes,
+    String? networkQuality,
+    String? source,
   }) async {
     joinCalls++;
 
     if (joinError != null) {
       throw joinError!;
-  Future<void> join( String activityId, { String? recommendationId, int? freeTimeMinutes,String? networkQuality,
-    String? source, }) async {
+    }
     if (failJoin) {
       throw Exception('Join failed');
     }

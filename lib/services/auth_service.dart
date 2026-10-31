@@ -117,9 +117,10 @@ class AuthService {
       return true;
     } on AuthException catch (error) {
       if (_isRejectedRefreshToken(error)) {
-      await clearSession();
-      return false;
-    } return true;
+        await clearSession();
+        return false;
+      }
+      return true;
   }on http.ClientException {
       await clearSession();
       return true;
