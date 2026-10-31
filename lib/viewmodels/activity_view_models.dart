@@ -45,10 +45,9 @@ class ActivitiesViewModel extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    errorMessage = null;
-
     isLoading = true;
     errorMessage = null;
+    showingCached = false;
     notifyListeners();
     try {
       _activities = await _activityService.getCachedActivities();

@@ -162,6 +162,14 @@ class ActivityService {
     return record;
   }
 
+  Future<List<Activity>> getPendingActivities() async {
+    final repository = _localRepository;
+    if (repository == null) return [];
+
+    final records = await repository.getPendingSync();
+    return records.map((record) => record.toActivity()).toList(growable: false);
+  }
+
   Future<void> join(
       String activityId, {
         String? recommendationId,
@@ -277,10 +285,13 @@ class ActivityService {
       body: jsonEncode(body),
     );
     _check(response, 'create the activity');
-    return Activity.fromJson(
+    final record = ActivityRecord.fromJson(
       Map<String, dynamic>.from(jsonDecode(response.body) as Map),
     );
+    await _cacheActivities([record]);
+    return record.toActivity();
   }
+
   Future<Activity?> getCachedActivity(String id) async {
     final record = await _localRepository?.getById(id);
     return record?.toActivity();

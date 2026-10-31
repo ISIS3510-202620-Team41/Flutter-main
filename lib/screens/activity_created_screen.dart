@@ -155,12 +155,25 @@ class ActivityCreatedScreen extends StatelessWidget {
                 ),
               ),
               if (savedOffline)
-                const Padding(
-                  padding: EdgeInsets.only(top: 10),
-                  child: Text(
-                    'Sin conexión: guardamos tu actividad y la crearemos cuando vuelvas a estar en línea.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 11, color: AppColors.rosewood),
+                Container(
+                  margin: const EdgeInsets.only(top: 10),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: AppColors.yellow.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.cloud_off_outlined, size: 17),
+                      SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          'Actividad guardada localmente. Se sincronizará al reconectar',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],

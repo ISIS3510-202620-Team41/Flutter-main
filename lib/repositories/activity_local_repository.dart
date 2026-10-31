@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import '../models/activity_record.dart';
 import '../cache/activity_memory_cache.dart';
+import '../models/activity.dart';
 
 class ActivityLocalRepository {
   ActivityLocalRepository(this._database, {ActivityMemoryCache? cache})
@@ -69,6 +70,18 @@ class ActivityLocalRepository {
       'activities',
       where: 'category = ?',
       whereArgs: [category],
+      orderBy: 'start_time ASC',
+    );
+
+    return result.map(ActivityRecord.fromMap).toList();
+  }
+
+  /// Activities created offline that were not sent to the backend yet.
+  Future<List<ActivityRecord>> getPendingSync() async {
+    final result = await _database.query(
+      'activities',
+      where: 'id LIKE ?',
+      whereArgs: ['$localActivityIdPrefix%'],
       orderBy: 'start_time ASC',
     );
 

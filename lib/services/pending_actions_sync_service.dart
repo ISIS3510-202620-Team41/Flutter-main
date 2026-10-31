@@ -164,6 +164,9 @@ class PendingActionsSyncService {
         throw UnsupportedError(
           'LEAVE_ACTIVITY synchronization is not implemented.',
         );
+      case PendingActionType.createActivity:
+        // TODO: Handle this case.
+        throw UnimplementedError();
     }
   }
 

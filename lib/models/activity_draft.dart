@@ -1,4 +1,5 @@
 import 'activity.dart';
+import 'activity_record.dart';
 
 class CategoryOption {
   const CategoryOption(this.label, this.backendValue, this.emoji);
@@ -155,4 +156,21 @@ class ActivityDraft {
       aboutLocation: aboutLocation,
     );
   }
+  //Fila guardada en SQLite mientras la actividad espera a ser sincronizada
+  ActivityRecord toRecord(String id) => ActivityRecord(
+    id: id,
+    title: title,
+    category: category,
+    startTime: startTime.toUtc().toIso8601String(),
+    endTime: endTime.toUtc().toIso8601String(),
+    locationName: locationName,
+    latitude: latitude,
+    longitude: longitude,
+    participants: 1,
+    capacity: capacity,
+    price: price,
+    aboutLocation: aboutLocation,
+    imageUrl: imageUrl,
+    cachedAt: DateTime.now().toUtc(),
+  );
 }

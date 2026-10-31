@@ -3,6 +3,7 @@ import 'dart:convert';
 enum PendingActionType {
   joinActivity,
   leaveActivity,
+  createActivity,
 }
 
 enum PendingActionStatus {
@@ -97,6 +98,8 @@ class PendingAction {
         return 'JOIN_ACTIVITY';
       case PendingActionType.leaveActivity:
         return 'LEAVE_ACTIVITY';
+      case PendingActionType.createActivity:
+        return 'CREATE_ACTIVITY';
     }
   }
 
@@ -106,6 +109,8 @@ class PendingAction {
         return 'joinActivity';
       case 'LEAVE_ACTIVITY':
         return 'leaveActivity';
+      case 'CREATE_ACTIVITY':
+        return 'createActivity';
       default:
         throw FormatException('Unknown pending action type: $type');
     }

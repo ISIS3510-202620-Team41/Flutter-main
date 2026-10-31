@@ -6,6 +6,8 @@ import '../widgets/header.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/map_preview.dart';
 import '../viewmodels/activity_view_models.dart';
+import '../widgets/pending_sync_badge.dart';
+import '../widgets/category_preferences_sheet.dart';
 
 
 class ActivitiesScreen extends StatefulWidget {
@@ -40,9 +42,23 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                 onAdd: () => Navigator.pushNamed(context, '/activity/create'),
               ),
               const SizedBox(height: 18),
-              const Text(
-                'Actividades cerca de ti',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Actividades cerca de ti',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => showCategoryPreferencesSheet(context),
+                    icon: const Icon(Icons.tune, size: 16),
+                    label: const Text(
+                      'Mis categorías',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
               MapPreview(height: 126, markerLabel: _viewModel.visibleActivities.isEmpty
@@ -274,6 +290,10 @@ class _ActivityRow extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 5),
+                  if (activity.isPendingSync) ...[
+                    const SizedBox(height: 5),
+                    const PendingSyncBadge(),
+                  ],
                   Wrap(
                     spacing: 8,
                     children: [
