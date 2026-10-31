@@ -59,29 +59,27 @@ class AuthService {
     return result;
   }
 
-
   // Hace auth para el uso de google calendar y manda el token de identidad al back
   Future<AuthResult> loginWithGoogle() async {
     try {
-    final account = await googleAccountForCalendar();
+      final account = await googleAccountForCalendar();
 
-    final idToken = account.authentication.idToken;
+      final idToken = account.authentication.idToken;
 
-    if (idToken == null || idToken.isEmpty) {
-      throw const AuthException(
-        message: 'Google no devolvió un token de identidad.',
-      );
-    }
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthException(
+          message: 'Google no devolvió un token de identidad.',
+        );
+      }
 
-    return await exchangeGoogleIdToken(idToken);
+      return await exchangeGoogleIdToken(idToken);
     } on GoogleSignInException catch (error) {
-    debugPrint(
-      '[GOOGLE][LOGIN] ${error.code} - ${error.description}',
-    );
+      debugPrint('[GOOGLE][LOGIN] ${error.code} - ${error.description}');
 
-    throw AuthException(
-      message: error.description ?? 'No fue posible iniciar sesión con Google.',
-    );
+      throw AuthException(
+        message:
+            error.description ?? 'No fue posible iniciar sesión con Google.',
+      );
     }
   }
 
@@ -105,21 +103,31 @@ class AuthService {
 
   Future<bool> restoreSession() async {
     final preferences = await SharedPreferences.getInstance();
+
     final refreshToken = preferences.getString('refresh_token');
-    if (refreshToken == null || refreshToken.isEmpty) return false;
+
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return false;
+    }
 
     try {
       await refresh().timeout(const Duration(seconds: 5));
       return true;
-    } on AuthException {
-      await clearSession();
-      return false;
+    } on AuthException catch (error) {
+      if (_isRejectedRefreshToken(error)) {
+        await clearSession();
+        return false;
+      }
+
+      // Error del servidor que no representa
+      // necesariamente una sesión inválida.
+      return true;
     } on http.ClientException {
-      await clearSession();
-      return false;
+      // No hay conexión o no se puede contactar al servidor.
+      return true;
     } on TimeoutException {
-      await clearSession();
-      return false;
+      // El servidor no respondió a tiempo.
+      return true;
     }
   }
 
@@ -209,10 +217,7 @@ class AuthService {
       final response = await dio.getUri<String>(
         uri,
         options: Options(
-          headers: {
-            'Authorization': 'Bearer $accessToken',
-            ...?headers,
-          },
+          headers: {'Authorization': 'Bearer $accessToken', ...?headers},
           responseType: ResponseType.plain,
           validateStatus: (status) => status != null,
         ),
@@ -243,10 +248,15 @@ class AuthService {
 
     try {
       refreshed = await refresh();
-    } on AuthException {
-      await clearSession();
-      authSession.setUnauthenticated();
-      throw const SessionExpiredException();
+    } on AuthException catch (error) {
+      if (_isRejectedRefreshToken(error)) {
+        await clearSession();
+        authSession.setUnauthenticated();
+
+        throw const SessionExpiredException();
+      }
+
+      rethrow;
     }
 
     accessToken = refreshed.accessToken;
@@ -290,10 +300,15 @@ class AuthService {
     late final AuthResult refreshed;
     try {
       refreshed = await refresh();
-    } on AuthException {
-      await clearSession();
-      authSession.setUnauthenticated();
-      throw const SessionExpiredException();
+    } on AuthException catch (error) {
+      if (_isRejectedRefreshToken(error)) {
+        await clearSession();
+        authSession.setUnauthenticated();
+
+        throw const SessionExpiredException();
+      }
+
+      rethrow;
     }
     accessToken = refreshed.accessToken;
     response = await send();
@@ -329,10 +344,15 @@ class AuthService {
     late final AuthResult refreshed;
     try {
       refreshed = await refresh();
-    } on AuthException {
-      await clearSession();
-      authSession.setUnauthenticated();
-      throw const SessionExpiredException();
+    } on AuthException catch (error) {
+      if (_isRejectedRefreshToken(error)) {
+        await clearSession();
+        authSession.setUnauthenticated();
+
+        throw const SessionExpiredException();
+      }
+
+      rethrow;
     }
     response = await send(refreshed.accessToken);
     if (response.statusCode == 401) {
@@ -481,6 +501,22 @@ class AuthService {
     debugPrint('[GOOGLE][ACCOUNT] Cuenta disponible: ${account.email}');
 
     return account;
+  }
+
+  Future<String?> getCurrentUserId() async {
+    final preferences = await SharedPreferences.getInstance();
+
+    final accessToken = preferences.getString('access_token');
+
+    if (accessToken == null || accessToken.isEmpty) {
+      return null;
+    }
+
+    return AnalyticsFacade.instance.decodeUserId(accessToken);
+  }
+
+  bool _isRejectedRefreshToken(AuthException error) {
+    return [400, 401, 403].contains(error.statusCode);
   }
 }
 
