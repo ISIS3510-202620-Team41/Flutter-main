@@ -30,8 +30,10 @@ String _formatMinutes(int minutes) {
   final rest = minutes % 60;
   return rest == 0 ? '$hours h' : '$hours h $rest min';
 }
+const localActivityIdPrefix = 'local-';
 
 class Activity {
+  bool get isPendingSync => id?.startsWith(localActivityIdPrefix) ?? false;
   const Activity({
     required this.category,
     required this.name,

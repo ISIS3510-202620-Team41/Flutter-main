@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:llamalla/repositories/activity_local_repository.dart';
 
 import '../database/local_database_facade.dart';
+import '../utils/haversine.dart';
 import '../utils/distance_calculator.dart';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
@@ -206,6 +207,33 @@ class ActivityService {
     return record;
   }
 
+  Future<List<Activity>> getPendingActivities() async {
+    final repository = _localRepository;
+    if (repository == null) return [];
+
+    final records = await repository.getPendingSync();
+    return records.map((record) => record.toActivity()).toList(growable: false);
+  }
+  Future<Activity> createActivity(
+      Map<String, dynamic> body, {
+        String? source,
+      }) async {
+    final query = source == null ? '' : '?source=$source';
+    final response = await _authService.authenticatedRequest(
+      method: 'POST',
+      path: '/activities$query',
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    _check(response, 'create the activity');
+
+    final record = ActivityRecord.fromJson(
+      Map<String, dynamic>.from(jsonDecode(response.body) as Map),
+    );
+    await _cacheActivities([record]);
+    return record.toActivity();
+  }
+
   Future<void> join(
       String activityId, {
         String? recommendationId,
@@ -351,24 +379,5 @@ class ActivityService {
       // Use the generic message when the backend response is not JSON.
     }
     throw ActivityException(message, statusCode: response.statusCode);
-  }
-  Future<Activity> createActivity(
-      Map<String, dynamic> body, {
-        String? source,
-      }) async {
-    final query = source == null ? '' : '?source=$source';
-    final response = await _authService.authenticatedRequest(
-      method: 'POST',
-      path: '/activities$query',
-      body: jsonEncode(body),
-    );
-    _check(response, 'create the activity');
-    return Activity.fromJson(
-      Map<String, dynamic>.from(jsonDecode(response.body) as Map),
-    );
-  }
-  Future<Activity?> getCachedActivity(String id) async {
-    final record = await _localRepository?.getById(id);
-    return record?.toActivity();
   }
 }

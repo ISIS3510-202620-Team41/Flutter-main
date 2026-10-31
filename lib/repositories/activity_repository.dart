@@ -1,14 +1,17 @@
-
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../database/local_database_facade.dart';
 import '../models/activity.dart';
 import '../models/activity_draft.dart';
+import '../models/pending_action.dart';
 import '../services/activity_service.dart';
+import '../services/session_user.dart';
+import 'activity_local_repository.dart';
+import 'pending_actions_repository.dart';
 
 class CreateResult {
   const CreateResult(this.activity, {this.savedOffline = false});
@@ -17,90 +20,151 @@ class CreateResult {
   final bool savedOffline;
 }
 
-/// Primero intenta guardar la actividad en el servidor, si no hay conexión, guarda el borrador localmente para que el usuario no pierda la actividad
+// Crea actividades online o las guarda localmente
 class ActivityRepository {
-  ActivityRepository({ActivityService? service})
-      : _service = service ?? ActivityService();
+  ActivityRepository({
+    ActivityService? service,
+    ActivityLocalRepository? localRepository,
+    PendingActionsRepository? pendingActions,
+    Future<bool> Function()? isOnline,
+    Future<String?> Function()? userId,
+  })  : _service = service ?? ActivityService(),
+        _injectedLocal = localRepository,
+        _injectedPending = pendingActions,
+        _isOnline = isOnline ?? _defaultIsOnline,
+        _userId = userId ?? currentUserId;
 
-  static const _pendingKey = 'pending_activity_drafts';
   static const _timeout = Duration(seconds: 10);
 
+  // Evita sincronizaciones simultáneas
+  static bool _syncing = false;
+
   final ActivityService _service;
+  final ActivityLocalRepository? _injectedLocal;
+  final PendingActionsRepository? _injectedPending;
+  final Future<bool> Function() _isOnline;
+  final Future<String?> Function() _userId;
+
+  ActivityLocalRepository? get _local =>
+      _injectedLocal ?? LocalDatabaseFacade.instance.activities;
+  PendingActionsRepository? get _pending =>
+      _injectedPending ?? LocalDatabaseFacade.instance.pendingActions;
+
+  static Future<bool> _defaultIsOnline() async {
+    final results = await Connectivity().checkConnectivity();
+    return results.any((result) => result != ConnectivityResult.none);
+  }
 
   Future<CreateResult> create(ActivityDraft draft, {String? source}) async {
-    try {
-      final activity = await _service
-          .createActivity(draft.toRequestJson(), source: source)
-          .timeout(_timeout);
-      unawaited(syncPending()); // Hay conexión, sincroniza los borradores anteriores.
-      return CreateResult(activity);
-    } catch (error) {
-      if (!_isNetworkError(error)) rethrow;
-      await _save(draft);
-      return CreateResult(draft.toActivity(), savedOffline: true);
-    }
-  }
-
-  Future<List<ActivityDraft>> pending() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_pendingKey);
-    if (raw == null) return [];
-    final list = jsonDecode(raw) as List;
-    return list
-        .map((e) =>
-        ActivityDraft.fromStorageJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
-  }
-
-  /// Envía los borradores guardados al servidor, devuelve la cantidad de actividades creadas y la tarea #32 llamará  vuelva la conexión
-  Future<int> syncPending() async {
-    var synced = 0;
-    for (final draft in await pending()) {
+    // Comprueba la conexión antes de crear
+    if (await _isOnline()) {
       try {
-        await _service
-            .createActivity(draft.toRequestJson())
+        final activity = await _service
+            .createActivity(draft.toRequestJson(), source: source)
             .timeout(_timeout);
-        await _remove(draft.clientId);
-        synced++;
+        unawaited(syncPending());
+        return CreateResult(activity);
       } catch (error) {
-        final rejected = error is ActivityException &&
-            (error.statusCode ?? 500) < 500;
-        if (rejected) {
-          await _remove(draft.clientId); // El servidor nunca aceptará este borrador.
-        } else {
-          break; // Problema de conexión o del servidor; se intentará más tarde.
-        }
+        if (!_isNetworkError(error)) rethrow;
       }
     }
-    return synced;
+    return _saveOffline(draft);
   }
 
-  // Comprueba si el error se debe a un problema de conexión.
+  Future<CreateResult> _saveOffline(ActivityDraft draft) async {
+    final local = _local;
+    final pending = _pending;
+    final userId = await _userId();
+    if (local == null || pending == null || userId == null) {
+      throw const ActivityException(
+        'No pudimos guardar la actividad en tu dispositivo.',
+      );
+    }
+
+    final localId = '$localActivityIdPrefix${draft.clientId}';
+    final record = draft.toRecord(localId);
+    await local.insert(record);
+
+    final now = DateTime.now().toUtc();
+    try {
+      await pending.enqueue(PendingAction(
+        id: draft.clientId,
+        userId: userId,
+        type: PendingActionType.createActivity,
+        activityId: localId,
+        payload: draft.toRequestJson(),
+        status: PendingActionStatus.pending,
+        attempts: 0,
+        createdAt: now,
+        updatedAt: now,
+      ));
+    } catch (_) {
+      await local.delete(localId);
+      rethrow;
+    }
+
+    return CreateResult(record.toActivity(), savedOffline: true);
+  }
+
+  // Envía en orden las tareas CREATE_ACTIVITY que están en la cola, devuelve cuántas se han sincronizado
+  Future<int> syncPending() async {
+    if (_syncing) return 0;
+    _syncing = true;
+    try {
+      final pending = _pending;
+      final local = _local;
+      final userId = await _userId();
+      if (pending == null || local == null || userId == null) return 0;
+
+      // estado PROCESSING: vuelve a colocarlas en la cola.
+      for (final action in await pending.getAllByUser(userId)) {
+        if (action.status == PendingActionStatus.processing) {
+          await pending.updateStatus(
+            id: action.id,
+            status: PendingActionStatus.pending,
+          );
+        }
+      }
+
+      var synced = 0;
+      for (final action in await pending.getPending(userId)) {
+        if (action.type != PendingActionType.createActivity) continue;
+
+        await pending.updateStatus(
+          id: action.id,
+          status: PendingActionStatus.processing,
+          attempts: action.attempts + 1,
+        );
+        try {
+          await _service.createActivity(action.payload).timeout(_timeout);
+          await local.delete(action.activityId);
+          await pending.delete(action.id);
+          synced++;
+        } catch (error) {
+          final rejected = error is ActivityException &&
+              (error.statusCode ?? 0) >= 400 &&
+              (error.statusCode ?? 0) < 500 &&
+              error.statusCode != 401 &&
+              error.statusCode != 403;
+          await pending.updateStatus(
+            id: action.id,
+            status: rejected
+                ? PendingActionStatus.failed
+                : PendingActionStatus.pending,
+            lastError: '$error',
+            attempts: action.attempts + 1,
+          );
+          if (!rejected) break;
+        }
+      }
+      return synced;
+    } finally {
+      _syncing = false;
+    }
+  }
+
   bool _isNetworkError(Object error) =>
       error is SocketException ||
           error is TimeoutException ||
           error is http.ClientException;
-
-  // Guarda un borrador de actividad en el almacenamiento local.
-  Future<void> _save(ActivityDraft draft) async {
-    final drafts = await pending();
-    drafts.add(draft);
-    await _write(drafts);
-  }
-
-  // Elimina un borrador usando su identificador único.
-  Future<void> _remove(String clientId) async {
-    final drafts = await pending();
-    drafts.removeWhere((d) => d.clientId == clientId);
-    await _write(drafts);
-  }
-
-  // Actualiza la lista de borradores guardados localmente.
-  Future<void> _write(List<ActivityDraft> drafts) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _pendingKey,
-      jsonEncode(drafts.map((d) => d.toStorageJson()).toList()),
-    );
-  }
 }

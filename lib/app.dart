@@ -19,6 +19,7 @@ import 'theme/app_theme.dart';
 import 'services/connectivity_service.dart';
 import 'widgets/offline_banner.dart';
 import 'services/pending_actions_sync_service.dart';
+import 'models/activity.dart';
 
 class LlamallaApp extends StatefulWidget {
   const LlamallaApp({super.key});

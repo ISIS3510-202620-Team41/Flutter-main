@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:llamalla/widgets/pending_sync_badge.dart';
 
 import '../models/activity.dart';
 import '../theme/app_theme.dart';
@@ -45,6 +46,12 @@ class ActivityCard extends StatelessWidget {
                   right: 10,
                   top: 10,
                   child: _Pill(text: activity.price, color: AppColors.white),
+                ),
+              if (activity.isPendingSync)
+                const Positioned(
+                  left: 10,
+                  bottom: 10,
+                  child: PendingSyncBadge(),
                 ),
             ],
           ),

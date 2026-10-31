@@ -203,6 +203,7 @@ class HomeViewModel extends ChangeNotifier {
         duration: watch.elapsed,
         networkQuality: networkQuality,
       ));
+      recommendationsError = null;
     } on ActivityException catch (error) {
       if (recommendations.isEmpty) {
         recommendationsError = error.message;
