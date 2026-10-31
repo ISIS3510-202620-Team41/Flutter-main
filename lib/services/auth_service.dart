@@ -16,9 +16,9 @@ final authSession = AuthSession();
 
 class AuthService {
   AuthService({http.Client? client, String? baseUrl})
-    : _client = client ?? http.Client(),
-      _baseUrl =
-          baseUrl ?? (_env('API_BASE_URL') ?? 'http://10.0.2.2:8080/api');
+      : _client = client ?? http.Client(),
+        _baseUrl =
+            baseUrl ?? (_env('API_BASE_URL') ?? 'http://10.0.2.2:8080/api');
 
   final http.Client _client;
   final String _baseUrl;
@@ -80,13 +80,15 @@ class AuthService {
 
       throw AuthException(
         message:
-            error.description ?? 'No fue posible iniciar sesión con Google.',
+        error.description ?? 'No fue posible iniciar sesión con Google.',
       );
     }
   }
 
   Future<AuthResult> exchangeGoogleIdToken(String idToken) async {
-    if (idToken.trim().isEmpty) {
+    if (idToken
+        .trim()
+        .isEmpty) {
       throw const AuthException(
         message: 'Google no devolvió un token de identidad.',
       );
@@ -120,13 +122,12 @@ class AuthService {
         await clearSession();
         return false;
       }
-      return true;
-  }on http.ClientException {
-      await clearSession();
-      return true;
+
+      return _keepSavedSession(preferences);
+    } on http.ClientException {
+      return _keepSavedSession(preferences);
     } on TimeoutException {
-      await clearSession();
-      return true;
+      return _keepSavedSession(preferences);
     }
   }
 

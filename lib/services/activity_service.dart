@@ -7,7 +7,6 @@ import '../utils/haversine.dart';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
 import 'auth_service.dart';
-import 'session_store.dart';
 
 class ActivityException implements Exception {
   const ActivityException(this.message, {this.statusCode});
