@@ -111,14 +111,14 @@ void main() {
   });
 
   test(
-    'restoreSession clears stale tokens when backend is unavailable',
-    () async {
+    'restoreSession keeps the saved session when there is no internet',
+        () async {
       SharedPreferences.setMockInitialValues({
         'access_token': 'access-token',
         'refresh_token': 'refresh-token',
       });
       final client = MockClient(
-        (_) async => throw http.ClientException('Connection refused'),
+            (_) async => throw http.ClientException('Connection refused'),
       );
 
       final restored = await AuthService(
@@ -127,9 +127,9 @@ void main() {
       ).restoreSession();
 
       final preferences = await SharedPreferences.getInstance();
-      expect(restored, isFalse);
-      expect(preferences.containsKey('access_token'), isFalse);
-      expect(preferences.containsKey('refresh_token'), isFalse);
+      expect(restored, isTrue);
+      expect(preferences.getString('access_token'), 'access-token');
+      expect(preferences.getString('refresh_token'), 'refresh-token');
     },
   );
 

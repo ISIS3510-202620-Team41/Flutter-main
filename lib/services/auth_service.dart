@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'session_store.dart';
 
 import '../analytics/analytics_facade.dart';
 
@@ -110,15 +111,20 @@ class AuthService {
       await refresh().timeout(const Duration(seconds: 5));
       return true;
     } on AuthException {
+      // The server rejected the refresh token: the session is really over.
       await clearSession();
       return false;
     } on http.ClientException {
-      await clearSession();
-      return false;
+      return _keepSavedSession(preferences);
     } on TimeoutException {
-      await clearSession();
-      return false;
+      return _keepSavedSession(preferences);
     }
+  }
+
+  //Conserva los tokens guardados para que la aplicación pueda abrirse y funcionar con los datos locales.
+  bool _keepSavedSession(SharedPreferences preferences) {
+    final accessToken = preferences.getString('access_token');
+    return accessToken != null && accessToken.isNotEmpty;
   }
 
   Future<AuthResult> refresh() async {
@@ -175,9 +181,7 @@ class AuthService {
   }
 
   Future<void> clearSession() async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.remove('access_token');
-    await preferences.remove('refresh_token');
+    await SessionStore().clear();
     AnalyticsFacade.instance.setUserId(null);
   }
 
@@ -289,12 +293,13 @@ class AuthService {
   }
 
   Future<void> _saveTokens(AuthResult result) async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString('access_token', result.accessToken);
-    await preferences.setString('refresh_token', result.refreshToken);
-    AnalyticsFacade.instance.setUserId(
-      AnalyticsFacade.instance.decodeUserId(result.accessToken),
+    final userId = AnalyticsFacade.instance.decodeUserId(result.accessToken);
+    await SessionStore().saveSession(
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      userId: userId,
     );
+    AnalyticsFacade.instance.setUserId(userId);
   }
 
   void _throwForError(
