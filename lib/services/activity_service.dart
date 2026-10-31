@@ -197,4 +197,8 @@ class ActivityService {
       Map<String, dynamic>.from(jsonDecode(response.body) as Map),
     );
   }
+  Future<Activity?> getCachedActivity(String id) async {
+    final record = await _localRepository?.getById(id);
+    return record?.toActivity();
+  }
 }

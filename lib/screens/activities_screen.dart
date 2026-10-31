@@ -7,6 +7,7 @@ import '../widgets/info_chip.dart';
 import '../widgets/map_preview.dart';
 import '../viewmodels/activity_view_models.dart';
 
+
 class ActivitiesScreen extends StatefulWidget {
   const ActivitiesScreen({super.key, this.onOpenDetail});
 
@@ -49,6 +50,11 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                   : (_viewModel.visibleActivities.first.locationName ??
                   _viewModel.visibleActivities.first.name),
               ),
+              if (_viewModel.showingCached)
+                const Text(
+                  'Sin conexión: mostrando actividades guardadas.',
+                  style: TextStyle(fontSize: 11, color: AppColors.rosewood),
+                ),
               const SizedBox(height: 9),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,

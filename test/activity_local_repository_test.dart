@@ -105,4 +105,52 @@ void main() {
 
     expect(result.length, 2);
   });
+  test('getById is served from memory without querying SQLite', () async {
+    await repository.insert(activity); // writes SQLite + cache
+
+    // Remove the row behind the repository's back.
+    final db = await appDatabase.database;
+    await db.delete('activities');
+
+    // Only possible if the answer came from the memory cache.
+    final result = await repository.getById('activity-1');
+    expect(result?.title, 'Football');
+  });
+
+  test('getById reads SQLite on a miss and caches the result', () async {
+    final db = await appDatabase.database;
+    await db.insert('activities', activity.toMap()); // bypasses the repository
+
+    expect(await repository.getById('activity-1'), isNotNull); // miss -> SQLite
+
+    await db.delete('activities');
+    expect(await repository.getById('activity-1'), isNotNull); // hit
+  });
+
+  test('delete removes the activity from the memory cache', () async {
+    await repository.insert(activity);
+    await repository.delete('activity-1');
+
+    expect(await repository.getById('activity-1'), isNull);
+  });
+
+  test('update refreshes the cached copy', () async {
+    await repository.insert(activity);
+
+    await repository.update(ActivityRecord(
+      id: activity.id,
+      title: 'Updated football',
+      category: activity.category,
+      startTime: activity.startTime,
+      endTime: activity.endTime,
+      locationName: activity.locationName,
+      latitude: activity.latitude,
+      longitude: activity.longitude,
+      participants: activity.participants,
+      cachedAt: activity.cachedAt,
+    ));
+
+    final result = await repository.getById('activity-1');
+    expect(result?.title, 'Updated football');
+  });
 }

@@ -4,6 +4,8 @@ import '../data/mock_data.dart';
 import '../models/activity.dart';
 import '../services/activity_service.dart';
 import '../services/location_service.dart';
+import 'dart:async';
+import '../cache/activity_image_cache.dart';
 
 class ActivitiesViewModel extends ChangeNotifier {
   ActivitiesViewModel({
@@ -23,6 +25,7 @@ class ActivitiesViewModel extends ChangeNotifier {
 
   List<Activity> _activities = const [];
   bool isLoading = true;
+  bool showingCached = false;
   String? errorMessage;
 
   List<Activity> get visibleActivities {
@@ -43,6 +46,7 @@ class ActivitiesViewModel extends ChangeNotifier {
   Future<void> load() async {
     isLoading = true;
     errorMessage = null;
+    showingCached = false;
     notifyListeners();
     try {
       final where = await _locationService.current();
@@ -50,6 +54,9 @@ class ActivitiesViewModel extends ChangeNotifier {
         lat: where.lat,
         lon: where.lon,
       );
+      unawaited(ActivityImageCacheManager.prefetch(
+        _activities.map((activity) => activity.imageUrl),
+      ));
     } on ActivityException catch (error) {
       errorMessage = error.message;
     } catch (_) {
@@ -58,6 +65,16 @@ class ActivitiesViewModel extends ChangeNotifier {
       isLoading = false;
       notifyListeners();
     }
+
+  }
+  Future<void> _showSavedOr(String message) async {
+    final saved = await _activityService.getCachedActivities();
+    if (saved.isEmpty) {
+      errorMessage = message;
+      return;
+    }
+    _activities = saved;
+    showingCached = true;
   }
 
   void setQuery(String value) {
