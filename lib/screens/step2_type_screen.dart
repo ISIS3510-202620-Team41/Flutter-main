@@ -4,35 +4,19 @@ import '../widgets/step_header.dart';
 import 'step3_place_screen.dart';
 import '../viewmodels/friends_view_model.dart';
 import '../navigation/app_routes.dart';
+import '../models/activity_draft.dart';
 
 class Step2TypeScreen extends StatefulWidget {
-  final List<String> friends;
-  const Step2TypeScreen({super.key, required this.friends});
+  const Step2TypeScreen({super.key, required this.viewModel});
+
+  final ActivityCreationViewModel viewModel;
 
   @override
   State<Step2TypeScreen> createState() => _Step2TypeScreenState();
 }
 
 class _Step2TypeScreenState extends State<Step2TypeScreen> {
-  final _viewModel = ActivityCreationViewModel();
-  final categories = const [
-    {'name': 'Food', 'emoji': '🍽️'},
-    {'name': 'Plays', 'emoji': '🎮'},
-    {'name': 'Music', 'emoji': '🎵'},
-    {'name': 'Study', 'emoji': '📚'},
-    {'name': 'Sport', 'emoji': '⚽'},
-    {'name': 'Cultural', 'emoji': '🎭'},
-  ];
-
-  void toggle(String name) {
-    _viewModel.toggleCategory(name);
-  }
-
-  @override
-  void dispose() {
-    _viewModel.dispose();
-    super.dispose();
-  }
+  ActivityCreationViewModel get _viewModel => widget.viewModel;
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +41,10 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                   childAspectRatio: 1.45,
-                  children: categories.map((cat) {
-                    final isActive = _viewModel.selectedCategories.contains(cat['name']);
+                  children: categoryOptions.map((cat) {
+                    final isActive = _viewModel.selectedCategory == cat;
                     return GestureDetector(
-                      onTap: () => toggle(cat['name']!),
+                      onTap: () => _viewModel.selectCategory(cat),
                       child: Container(
                         decoration: BoxDecoration(
                           color: isActive ? AppColors.rosewood : Colors.white,
@@ -72,10 +56,10 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(cat['emoji']!, style: const TextStyle(fontSize: 26)),
+                            Text(cat.emoji, style: const TextStyle(fontSize: 26)),
                             const SizedBox(height: 8),
                             Text(
-                              cat['name']!,
+                              cat.label,
                               style: TextStyle(
                                 fontSize: 12,
                                 color: isActive ? Colors.white : Colors.black,
@@ -105,7 +89,7 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _viewModel.selectedCategories.isEmpty
+                        onPressed: _viewModel.selectedCategory ==null
                             ? null
                             : () {
                           Navigator.push(
@@ -115,8 +99,7 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                                 name: AppRoutes.activityPlace,
                               ),
                               builder: (_) => Step3PlaceScreen(
-                                friends: widget.friends,
-                                categories: _viewModel.selectedCategories,
+                                viewModel: _viewModel
                               ),
                             ),
                           );

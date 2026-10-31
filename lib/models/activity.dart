@@ -5,19 +5,15 @@ String categoryLabel(String? backendValue) {
     case 'DEPORTES':
     case 'SPORTS':
       return 'Sports';
-
     case 'ESTUDIO':
     case 'STUDY':
       return 'Study';
-
     case 'CULTURA':
     case 'CULTURE':
       return 'Culture';
-
     case 'ENTRETENIMIENTO':
     case 'ENTERTAINMENT':
       return 'Entertainment';
-
     default:
       return backendValue ?? '';
   }
@@ -48,6 +44,9 @@ class Activity {
     this.id,
     this.locationName,
     this.score,
+    this.participants = 0,
+    this.capacity,
+    this.aboutLocation,
   });
 
   final String category;
@@ -61,6 +60,17 @@ class Activity {
   final String? id;
   final String? locationName;
   final double? score;
+  final int participants;
+  final int? capacity;
+  final String? aboutLocation;
+
+  String get spotsLabel => capacity == null
+      ? '$participants inscritos'
+      : '$participants/$capacity cupos';
+
+  double? get spotsFraction => (capacity == null || capacity == 0)
+      ? null
+      : (participants / capacity!).clamp(0.0, 1.0);
 
   factory Activity.fromJson(
       Map<String, dynamic> json, {
@@ -84,7 +94,10 @@ class Activity {
       duration: minutes == null ? '' : _formatMinutes(minutes),
       price: json['price'] as String? ?? '',
       people: participants == 1 ? '1 registered' : '$participants registered participants',
-      imageUrl:json['imageUrl'] as String? ?? '',
+      imageUrl: json['imageUrl'] as String? ?? '',
+      participants: participants,
+      capacity: (json['capacity'] as num?)?.toInt(),
+      aboutLocation: json['aboutLocation'] as String?,
       fitsWindow:
       freeMinutes == null || minutes == null || minutes <= freeMinutes,
       score: score,

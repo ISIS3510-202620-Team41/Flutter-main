@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
@@ -72,6 +73,7 @@ class HomeViewModel extends ChangeNotifier {
   int? recommendationFreeMinutes;
   String? recommendationsError;
   String? actionMessage;
+  String networkQuality = 'unknown';
 
   String get greetingName {
     final name = profile?.name.trim() ?? '';
@@ -93,6 +95,8 @@ class HomeViewModel extends ChangeNotifier {
     errorMessage = null;
     recommendationsError = null;
     actionMessage = null;
+    networkQuality = 'unknown';
+    _networkProbe = Completer<void>();
 
     isLoadingRecommendations = recommendations.isEmpty;
     notifyListeners();
@@ -101,6 +105,7 @@ class HomeViewModel extends ChangeNotifier {
     final recommendationsFuture = _loadRecommendations();
 
     try {
+      final probe = Stopwatch()..start();
       profile = await _profileService.getCurrentUser();
       _currentUserId = profile!.id;
 
@@ -108,6 +113,7 @@ class HomeViewModel extends ChangeNotifier {
       final gaps = await _scheduleService.getGaps(
         date: DateTime(date.year, date.month, date.day),
       );
+      networkQuality = classifyNetworkQuality(probe.elapsed);
 
       final now = _now();
       final upcoming = gaps.free
@@ -123,6 +129,7 @@ class HomeViewModel extends ChangeNotifier {
     } catch (_) {
       errorMessage = 'No pudimos cargar tu información. Intenta de nuevo.';
     } finally {
+      if (!_networkProbe.isCompleted) _networkProbe.complete();
       isLoading = false;
       notifyListeners();
     }
@@ -170,19 +177,31 @@ class HomeViewModel extends ChangeNotifier {
 
       isLoadingRecommendations = false;
       notifyListeners();
+      
+      // Esperamos la medición de red para enviar networkQuality al backend.
+      await _networkProbe.future;
 
       // Consultamos al backend para obtener las recomendaciones más recientes
+      final watch = Stopwatch()..start();
       final batch = await _activityService.getRecommendations(
         lat: where.lat,
         lon: where.lon,
         calculateDistanceLocally: true,
+        networkQuality: networkQuality,
       );
+      watch.stop();
 
       recommendations = batch.activities;
       recommendationId = batch.recommendationId;
       recommendationFreeMinutes = batch.freeMinutes;
 
-      recommendationsError = null;
+      // BQ10: tiempo de carga de la pantalla de recomendaciones
+      unawaited(_analyticsFacade.trackAppLoadingTime(
+        loadType: 'screen',
+        screen: 'recommendations',
+        duration: watch.elapsed,
+        networkQuality: networkQuality,
+      ));
     } on ActivityException catch (error) {
       if (recommendations.isEmpty) {
         recommendationsError = error.message;
@@ -239,6 +258,7 @@ class HomeViewModel extends ChangeNotifier {
           id,
           recommendationId: recommendationId,
           freeTimeMinutes: recommendationFreeMinutes,
+          networkQuality: networkQuality,
         );
       } catch (error) {
         if (_isRetryableJoinError(error)) {
@@ -439,4 +459,11 @@ String formatClockTime(DateTime value) {
   final minute = value.minute.toString().padLeft(2, '0');
   final period = value.hour >= 12 ? 'PM' : 'AM';
   return '$hour:$minute $period';
+}
+
+String classifyNetworkQuality(Duration elapsed) {
+  final ms = elapsed.inMilliseconds;
+  if (ms < 1500) return 'good';
+  if (ms < 4000) return 'fair';
+  return 'poor';
 }

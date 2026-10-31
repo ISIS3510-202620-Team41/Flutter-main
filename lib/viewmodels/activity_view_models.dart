@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../cache/activity_image_cache.dart';
 import '../data/mock_data.dart';
 import '../models/activity.dart';
 import '../services/activity_service.dart';
@@ -37,6 +40,9 @@ class ActivitiesViewModel extends ChangeNotifier {
 
   List<Activity> _activities = const [];
   bool isLoading = true;
+
+  /// True when the list comes from SQLite because the request failed.
+  bool showingCached = false;
   String? errorMessage;
 
   List<Activity> get visibleActivities =>
@@ -61,6 +67,7 @@ class ActivitiesViewModel extends ChangeNotifier {
 
   Future<void> load() async {
     errorMessage = null;
+    showingCached = false;
     isLoading = true;
 
     notifyListeners();

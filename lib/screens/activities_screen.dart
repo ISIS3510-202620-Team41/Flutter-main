@@ -9,6 +9,7 @@ import '../widgets/info_chip.dart';
 import '../widgets/map_preview.dart';
 import '../viewmodels/activity_view_models.dart';
 
+
 class ActivitiesScreen extends StatefulWidget {
   const ActivitiesScreen({super.key, this.onOpenDetail});
 

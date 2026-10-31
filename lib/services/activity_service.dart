@@ -49,12 +49,14 @@ class ActivityService {
     required double lon,
     double radiusKm = 5,
     String timezone = 'America/Bogota',
+    String networkQuality = 'unknown',
     bool calculateDistanceLocally = true,
   }) async {
     final response = await _authService.authenticatedCachedGet(
       path:
           '/activities/recommendations?lat=$lat&lon=$lon&radius=$radiusKm'
           '&tz=${Uri.encodeQueryComponent(timezone)}',
+          '&networkQuality=$networkQuality',
     );
 
     _check(response, 'load the recommendations');
@@ -208,14 +210,14 @@ class ActivityService {
       String activityId, {
         String? recommendationId,
         int? freeTimeMinutes,
+        String? networkQuality,
+        String? source,
       }) async {
     final query = <String, String>{};
-    if (recommendationId != null) {
-      query['recommendationId'] = recommendationId;
-    }
-    if (freeTimeMinutes != null) {
-      query['freeTimeMinutes'] = '$freeTimeMinutes';
-    }
+    if (recommendationId != null) query['recommendationId'] = recommendationId;
+    if (freeTimeMinutes != null) query['freeTimeMinutes'] = '$freeTimeMinutes';
+    if (networkQuality != null) query['networkQuality'] = networkQuality;
+    if (source != null) query['source'] = source;
     final queryString =
     query.isEmpty ? '' : '?${Uri(queryParameters: query).query}';
 
@@ -349,5 +351,24 @@ class ActivityService {
       // Use the generic message when the backend response is not JSON.
     }
     throw ActivityException(message, statusCode: response.statusCode);
+  }
+  Future<Activity> createActivity(
+      Map<String, dynamic> body, {
+        String? source,
+      }) async {
+    final query = source == null ? '' : '?source=$source';
+    final response = await _authService.authenticatedRequest(
+      method: 'POST',
+      path: '/activities$query',
+      body: jsonEncode(body),
+    );
+    _check(response, 'create the activity');
+    return Activity.fromJson(
+      Map<String, dynamic>.from(jsonDecode(response.body) as Map),
+    );
+  }
+  Future<Activity?> getCachedActivity(String id) async {
+    final record = await _localRepository?.getById(id);
+    return record?.toActivity();
   }
 }
