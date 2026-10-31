@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'dart:io';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
 import '../theme/app_theme.dart';
@@ -282,6 +282,25 @@ class _ActivityDetailScreenState
   }
 
   Widget _buildImage(ActivityRecord activity) {
+    final localPath = activity.localImagePath;
+
+    if (localPath != null && localPath.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.file(
+          File(localPath),
+          height: 170,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _networkImage(activity),
+        ),
+      );
+    }
+
+    return _networkImage(activity);
+  }
+
+  Widget _networkImage(ActivityRecord activity) {
     final imageUrl = activity.imageUrl?.trim() ?? '';
 
     if (imageUrl.isEmpty) {

@@ -9,7 +9,7 @@ class AppDatabase {
             databaseFactory ?? sqflite.databaseFactory;
 
   static const String databaseName = 'llamalla.db';
-  static const int databaseVersion = 1;
+  static const int databaseVersion = 2;
 
   final sqflite.DatabaseFactory _databaseFactory;
   final String? _databasePath;
@@ -61,6 +61,7 @@ class AppDatabase {
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
         image_url TEXT,
+        local_image_path TEXT,
         price TEXT,
         capacity INTEGER,
         about_location TEXT,
@@ -128,7 +129,12 @@ class AppDatabase {
     int oldVersion,
     int newVersion,
   ) async {
-    //Espacio para migraciones futuras
+    if (oldVersion < 2) {
+      await db.execute('''
+        ALTER TABLE activities
+        ADD COLUMN local_image_path TEXT
+      ''');
+    }
   }
 
   Future<void> close() async {

@@ -48,6 +48,7 @@ class Activity {
     this.id,
     this.locationName,
     this.score,
+    this.localImagePath,
   });
 
   final String category;
@@ -61,6 +62,7 @@ class Activity {
   final String? id;
   final String? locationName;
   final double? score;
+  final String? localImagePath;
 
   factory Activity.fromJson(
       Map<String, dynamic> json, {
@@ -88,6 +90,7 @@ class Activity {
       fitsWindow:
       freeMinutes == null || minutes == null || minutes <= freeMinutes,
       score: score,
+      localImagePath: json['localImagePath'] as String?,
     );
   }
 }

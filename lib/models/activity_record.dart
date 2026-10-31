@@ -18,6 +18,7 @@ class ActivityRecord {
     this.price,
     this.aboutLocation,
     this.imageUrl,
+    this.localImagePath,
   });
 
   final String id;
@@ -39,6 +40,7 @@ class ActivityRecord {
   final String? price;
   final String? aboutLocation;
   final String? imageUrl;
+  final String? localImagePath;
 
   // Metadata local no suplida por el Backend
   final DateTime cachedAt;
@@ -85,6 +87,7 @@ class ActivityRecord {
       aboutLocation: map['about_location'] as String?,
       imageUrl: map['image_url'] as String?,
       cachedAt: DateTime.parse(map['cached_at'] as String),
+      localImagePath: map['local_image_path'] as String?,
     );
   }
   // Convierte un record a columnas usadas en el SQLite
@@ -106,6 +109,7 @@ class ActivityRecord {
       'about_location': aboutLocation,
       'image_url': imageUrl,
       'cached_at': cachedAt.toUtc().toIso8601String(),
+      'local_image_path': localImagePath,
     };
   }
 
@@ -130,9 +134,34 @@ class ActivityRecord {
         'price': price,
         'aboutLocation': aboutLocation,
         'imageUrl': imageUrl,
+        'localImagePath': localImagePath,
       },
       score: score,
       freeMinutes: freeMinutes,
+    );
+  }
+
+  ActivityRecord copyWith({
+    String? localImagePath,
+  }) {
+    return ActivityRecord(
+      id: id,
+      title: title,
+      description: description,
+      category: category,
+      startTime: startTime,
+      endTime: endTime,
+      locationName: locationName,
+      latitude: latitude,
+      longitude: longitude,
+      distanceKm: distanceKm,
+      participants: participants,
+      capacity: capacity,
+      price: price,
+      aboutLocation: aboutLocation,
+      imageUrl: imageUrl,
+      localImagePath: localImagePath ?? this.localImagePath,
+      cachedAt: cachedAt,
     );
   }
 

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../models/activity.dart';
@@ -25,8 +26,8 @@ class ActivityCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (activity.imageUrl.isNotEmpty)
-            _ActivityImage(url: activity.imageUrl)
+          if (activity.imageUrl.isNotEmpty || (activity.localImagePath?.isNotEmpty ?? false))
+            _ActivityImage(url: activity.imageUrl, localPath: activity.localImagePath,)
           else
             Container(
               height: compact ? 72 : 106,
@@ -109,22 +110,54 @@ class ActivityCard extends StatelessWidget {
 }
 
 class _ActivityImage extends StatelessWidget {
-  const _ActivityImage({required this.url});
+  const _ActivityImage({
+    required this.url,
+    this.localPath,
+  });
 
   final String url;
+  final String? localPath;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    final path = localPath;
+
+    if (path != null && path.isNotEmpty) {
+      return Image.file(
+        File(path),
+        height: 106,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) {
+          return _networkImage();
+        },
+      );
+    }
+
+    return _networkImage();
+  }
+
+  Widget _networkImage() {
+    if (url.isEmpty) {
+      return _fallback();
+    }
+
+    return Image.network(
+      url,
       height: 106,
       width: double.infinity,
-      child: Image.network(
-        url,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => Container(
-          color: AppColors.blue.withValues(alpha: 0.30),
-          child: const Center(child: Icon(Icons.broken_image_outlined)),
-        ),
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _fallback(),
+    );
+  }
+
+  Widget _fallback() {
+    return Container(
+      height: 106,
+      width: double.infinity,
+      color: AppColors.blue.withValues(alpha: 0.30),
+      child: const Center(
+        child: Icon(Icons.broken_image_outlined),
       ),
     );
   }

@@ -25,6 +25,7 @@ dependencies:
   dio_cache_interceptor: 4.0.7
   http_cache_file_store: 2.0.2
   connectivity_plus: 6.1.5
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

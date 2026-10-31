@@ -6,6 +6,7 @@ import '../database/local_database_facade.dart';
 import '../utils/distance_calculator.dart';
 import '../models/activity.dart';
 import '../models/activity_record.dart';
+import 'activity_image_cache_service.dart';
 import 'auth_service.dart';
 
 class ActivityException implements Exception {
@@ -39,7 +40,8 @@ class ActivityService {
 
   final AuthService _authService;
   final ActivityLocalRepository? _injectedLocalRepository;
-
+  final ActivityImageCacheService _imageCache = ActivityImageCacheService();
+  
   ActivityLocalRepository? get _localRepository =>
     _injectedLocalRepository ?? LocalDatabaseFacade.instance.activities;
 
@@ -47,7 +49,7 @@ class ActivityService {
   Future<RecommendationBatch> getRecommendations({
     required double lat,
     required double lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
     String timezone = 'America/Bogota',
     bool calculateDistanceLocally = true,
   }) async {
@@ -139,7 +141,7 @@ class ActivityService {
   Future<List<Activity>> getNearby({
     required double lat,
     required double lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
     bool calculateDistanceLocally = true,
   }) async {
     final records = await _fetchNearbyRecords(
@@ -161,7 +163,7 @@ class ActivityService {
   Future<void> refreshNearby({
     required double lat,
     required double lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
   }) async {
     final records = await _fetchNearbyRecords(
       lat: lat,
@@ -230,7 +232,7 @@ class ActivityService {
     List<ActivityRecord> records, {
     double? lat,
     double? lon,
-    double radiusKm = 5,
+    double radiusKm = 50,
   }) async {
     // No location valid no calculamos distancias
     if (lat == null || lon == null) {
@@ -270,7 +272,7 @@ class ActivityService {
     return decoded;
   }
 
-  Future<List<Activity>> getCachedActivities({double? lat, double? lon, double radiusKm = 5,}) async {
+  Future<List<Activity>> getCachedActivities({double? lat, double? lon, double radiusKm = 50,}) async {
     final repository = _localRepository;
 
     if (repository == null) {
@@ -287,7 +289,7 @@ class ActivityService {
     );
   }
 
-  Stream<List<Activity>> watchCachedActivities({double? lat, double? lon, double radiusKm = 5,}) {
+  Stream<List<Activity>> watchCachedActivities({double? lat, double? lon, double radiusKm = 50,}) {
     final repository = _localRepository;
 
     if (repository == null) {
@@ -304,7 +306,9 @@ class ActivityService {
     });
   }
 
-  Future<void> _cacheActivities(List<ActivityRecord> records,) async {
+  Future<void> _cacheActivities(
+    List<ActivityRecord> records,
+  ) async {
     final repository = _localRepository;
 
     if (repository == null || records.isEmpty) {
@@ -312,10 +316,39 @@ class ActivityService {
     }
 
     try {
-      await repository.upsertAll(records);
+      final updatedRecords = <ActivityRecord>[];
+
+      for (final record in records) {
+        // Recuperamos la versión anterior de SQLite.
+        final previous = await repository.getById(record.id);
+
+        String? localPath;
+
+        // Si tiene URL, intentamos descargar la imagen.
+        if (record.imageUrl != null &&
+            record.imageUrl!.isNotEmpty) {
+          localPath = await _imageCache.downloadAndCache(
+            activityId: record.id,
+            imageUrl: record.imageUrl!,
+          );
+        }
+
+        // Si falla la descarga, conservamos la imagen anterior.
+        localPath ??= previous?.localImagePath;
+
+        updatedRecords.add(
+          record.copyWith(
+            localImagePath: localPath,
+          ),
+        );
+      }
+
+      await repository.upsertAll(updatedRecords);
+
     } catch (_) {
     }
   }
+
 
   Future<List<ActivityRecord>> _fetchNearbyRecords({
     required double lat,
