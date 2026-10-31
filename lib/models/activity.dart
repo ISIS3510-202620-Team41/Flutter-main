@@ -2,12 +2,16 @@ const activityCategoryLabels = ['Sports', 'Study', 'Culture', 'Entertainment'];
 
 String categoryLabel(String? backendValue) {
   switch (backendValue) {
+    case 'DEPORTES':
     case 'SPORTS':
       return 'Sports';
+    case 'ESTUDIO':
     case 'STUDY':
       return 'Study';
+    case 'CULTURA':
     case 'CULTURE':
       return 'Culture';
+    case 'ENTRETENIMIENTO':
     case 'ENTERTAINMENT':
       return 'Entertainment';
     default:
@@ -26,8 +30,10 @@ String _formatMinutes(int minutes) {
   final rest = minutes % 60;
   return rest == 0 ? '$hours h' : '$hours h $rest min';
 }
+const localActivityIdPrefix = 'local-';
 
 class Activity {
+  bool get isPendingSync => id?.startsWith(localActivityIdPrefix) ?? false;
   const Activity({
     required this.category,
     required this.name,
@@ -40,6 +46,9 @@ class Activity {
     this.id,
     this.locationName,
     this.score,
+    this.participants = 0,
+    this.capacity,
+    this.aboutLocation,
   });
 
   final String category;
@@ -53,6 +62,17 @@ class Activity {
   final String? id;
   final String? locationName;
   final double? score;
+  final int participants;
+  final int? capacity;
+  final String? aboutLocation;
+
+  String get spotsLabel => capacity == null
+      ? '$participants inscritos'
+      : '$participants/$capacity cupos';
+
+  double? get spotsFraction => (capacity == null || capacity == 0)
+      ? null
+      : (participants / capacity!).clamp(0.0, 1.0);
 
   factory Activity.fromJson(
       Map<String, dynamic> json, {
@@ -74,9 +94,12 @@ class Activity {
       locationName: json['locationName'] as String?,
       distance: km == null ? '' : _formatDistance(km),
       duration: minutes == null ? '' : _formatMinutes(minutes),
-      price: '',
+      price: json['price'] as String? ?? '',
       people: participants == 1 ? '1 registered' : '$participants registered participants',
-      imageUrl: '',
+      imageUrl: json['imageUrl'] as String? ?? '',
+      participants: participants,
+      capacity: (json['capacity'] as num?)?.toInt(),
+      aboutLocation: json['aboutLocation'] as String?,
       fitsWindow:
       freeMinutes == null || minutes == null || minutes <= freeMinutes,
       score: score,

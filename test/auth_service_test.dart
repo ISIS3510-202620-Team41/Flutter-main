@@ -111,8 +111,8 @@ void main() {
   });
 
   test(
-    'restoreSession keeps the saved session when there is no internet',
-        () async {
+    'restoreSession clears stale tokens when backend is unavailable',
+    () async {
       SharedPreferences.setMockInitialValues({
         'access_token': 'access-token',
         'refresh_token': 'refresh-token',
@@ -127,6 +127,7 @@ void main() {
       ).restoreSession();
 
       final preferences = await SharedPreferences.getInstance();
+
       expect(restored, isTrue);
       expect(preferences.getString('access_token'), 'access-token');
       expect(preferences.getString('refresh_token'), 'refresh-token');

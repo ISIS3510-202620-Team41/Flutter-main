@@ -6,11 +6,14 @@ import '../widgets/header.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/map_preview.dart';
 import '../viewmodels/activity_view_models.dart';
+import '../widgets/pending_sync_badge.dart';
+import '../widgets/category_preferences_sheet.dart';
+
 
 class ActivitiesScreen extends StatefulWidget {
   const ActivitiesScreen({super.key, this.onOpenDetail});
 
-  final VoidCallback? onOpenDetail;
+  final ValueChanged<String>? onOpenDetail;
 
   @override
   State<ActivitiesScreen> createState() => _ActivitiesScreenState();
@@ -39,9 +42,23 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                 onAdd: () => Navigator.pushNamed(context, '/activity/create'),
               ),
               const SizedBox(height: 18),
-              const Text(
-                'Actividades cerca de ti',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Actividades cerca de ti',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => showCategoryPreferencesSheet(context),
+                    icon: const Icon(Icons.tune, size: 16),
+                    label: const Text(
+                      'Mis categorías',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
               MapPreview(height: 126, markerLabel: _viewModel.visibleActivities.isEmpty
@@ -49,6 +66,11 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                   : (_viewModel.visibleActivities.first.locationName ??
                   _viewModel.visibleActivities.first.name),
               ),
+              if (_viewModel.showingCached)
+                const Text(
+                  'Sin conexión: mostrando actividades guardadas.',
+                  style: TextStyle(fontSize: 11, color: AppColors.rosewood),
+                ),
               const SizedBox(height: 9),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -126,15 +148,19 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                     ),
                   )
                 else
-                  ..._viewModel.visibleActivities.map(
-                        (activity) => Padding(
+                  ..._viewModel.visibleActivities.map((activity) {
+                    final activityId = activity.id;
+
+                    return Padding(
                       padding: const EdgeInsets.only(bottom: 9),
                       child: _ActivityRow(
                         activity: activity,
-                        onTap: widget.onOpenDetail,
+                        onTap: activityId == null
+                            ? null
+                            : () => widget.onOpenDetail?.call(activityId),
                       ),
-                    ),
-                  ),
+                    );
+                  }),
             ],
           ),
         ),
@@ -264,6 +290,10 @@ class _ActivityRow extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 5),
+                  if (activity.isPendingSync) ...[
+                    const SizedBox(height: 5),
+                    const PendingSyncBadge(),
+                  ],
                   Wrap(
                     spacing: 8,
                     children: [

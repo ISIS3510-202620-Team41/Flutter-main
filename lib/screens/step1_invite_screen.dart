@@ -174,7 +174,7 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
                                 name: AppRoutes.activityType,
                               ),
                               builder: (_) => Step2TypeScreen(
-                                friends: _viewModel.selectedFriends
+                                viewModel: _viewModel,
                                 ),
                             ),
                           );

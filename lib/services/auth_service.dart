@@ -7,8 +7,10 @@ import 'package:http/http.dart' as http;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'session_store.dart';
+import 'package:dio/dio.dart';
 
 import '../analytics/analytics_facade.dart';
+import 'http_cache_service.dart';
 
 final authSession = AuthSession();
 
@@ -62,25 +64,24 @@ class AuthService {
   // Hace auth para el uso de google calendar y manda el token de identidad al back
   Future<AuthResult> loginWithGoogle() async {
     try {
-    final account = await googleAccountForCalendar();
+      final account = await googleAccountForCalendar();
 
-    final idToken = account.authentication.idToken;
+      final idToken = account.authentication.idToken;
 
-    if (idToken == null || idToken.isEmpty) {
-      throw const AuthException(
-        message: 'Google no devolvió un token de identidad.',
-      );
-    }
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthException(
+          message: 'Google no devolvió un token de identidad.',
+        );
+      }
 
-    return await exchangeGoogleIdToken(idToken);
+      return await exchangeGoogleIdToken(idToken);
     } on GoogleSignInException catch (error) {
-    debugPrint(
-      '[GOOGLE][LOGIN] ${error.code} - ${error.description}',
-    );
+      debugPrint('[GOOGLE][LOGIN] ${error.code} - ${error.description}');
 
-    throw AuthException(
-      message: error.description ?? 'No fue posible iniciar sesión con Google.',
-    );
+      throw AuthException(
+        message:
+            error.description ?? 'No fue posible iniciar sesión con Google.',
+      );
     }
   }
 
@@ -104,20 +105,27 @@ class AuthService {
 
   Future<bool> restoreSession() async {
     final preferences = await SharedPreferences.getInstance();
+
     final refreshToken = preferences.getString('refresh_token');
-    if (refreshToken == null || refreshToken.isEmpty) return false;
+
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return false;
+    }
 
     try {
       await refresh().timeout(const Duration(seconds: 5));
       return true;
-    } on AuthException {
-      // The server rejected the refresh token: the session is really over.
+    } on AuthException catch (error) {
+      if (_isRejectedRefreshToken(error)) {
       await clearSession();
       return false;
-    } on http.ClientException {
-      return _keepSavedSession(preferences);
+    } return true;
+  }on http.ClientException {
+      await clearSession();
+      return true;
     } on TimeoutException {
-      return _keepSavedSession(preferences);
+      await clearSession();
+      return true;
     }
   }
 
@@ -163,6 +171,12 @@ class AuthService {
         );
       }
     } finally {
+      try {
+        await HttpCacheService.instance.clear();
+      } catch (error) {
+        debugPrint('[HTTP CACHE][CLEAR ERROR] $error');
+      }
+
       await clearSession();
 
       //Cerramos aca la sesion que se tiene con google si esta activa
@@ -173,7 +187,7 @@ class AuthService {
         _googleAccount = null;
 
         debugPrint('[GOOGLE][SIGNOUT] Sesion de google del usuario cerrada');
-      } catch (error, stackTrace){
+      } catch (error, stackTrace) {
         debugPrint('[GOOGLE][SIGNOUT][ERROR] $error');
         debugPrintStack(stackTrace: stackTrace);
       }
@@ -183,6 +197,81 @@ class AuthService {
   Future<void> clearSession() async {
     await SessionStore().clear();
     AnalyticsFacade.instance.setUserId(null);
+  }
+
+  Future<http.Response> authenticatedCachedGet({
+    required String path,
+    Map<String, String>? headers,
+  }) async {
+    final preferences = await SharedPreferences.getInstance();
+
+    var accessToken = preferences.getString('access_token');
+
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const SessionExpiredException();
+    }
+
+    Future<http.Response> send() async {
+      final dio = await HttpCacheService.instance.getDio();
+
+      final uri = Uri.parse('$_baseUrl$path');
+
+      final response = await dio.getUri<String>(
+        uri,
+        options: Options(
+          headers: {'Authorization': 'Bearer $accessToken', ...?headers},
+          responseType: ResponseType.plain,
+          validateStatus: (status) => status != null,
+        ),
+      );
+
+      final responseHeaders = <String, String>{};
+
+      response.headers.map.forEach((name, values) {
+        responseHeaders[name] = values.join(', ');
+      });
+
+      return http.Response(
+        response.data ?? '',
+        response.statusCode ?? 0,
+        headers: responseHeaders,
+        request: http.Request('GET', uri),
+      );
+    }
+
+    var response = await send();
+
+    if (response.statusCode != 401) {
+      return response;
+    }
+
+    // Si el token expiró, conservamos el mecanismo actual de renovación.
+    late final AuthResult refreshed;
+
+    try {
+      refreshed = await refresh();
+    } on AuthException catch (error) {
+      if (_isRejectedRefreshToken(error)) {
+        await clearSession();
+        authSession.setUnauthenticated();
+
+        throw const SessionExpiredException();
+      }
+
+      rethrow;
+    }
+
+    accessToken = refreshed.accessToken;
+
+    response = await send();
+
+    if (response.statusCode == 401) {
+      await clearSession();
+      authSession.setUnauthenticated();
+      throw const SessionExpiredException();
+    }
+
+    return response;
   }
 
   Future<http.Response> authenticatedRequest({
@@ -213,10 +302,15 @@ class AuthService {
     late final AuthResult refreshed;
     try {
       refreshed = await refresh();
-    } on AuthException {
-      await clearSession();
-      authSession.setUnauthenticated();
-      throw const SessionExpiredException();
+    } on AuthException catch (error) {
+      if (_isRejectedRefreshToken(error)) {
+        await clearSession();
+        authSession.setUnauthenticated();
+
+        throw const SessionExpiredException();
+      }
+
+      rethrow;
     }
     accessToken = refreshed.accessToken;
     response = await send();
@@ -252,10 +346,15 @@ class AuthService {
     late final AuthResult refreshed;
     try {
       refreshed = await refresh();
-    } on AuthException {
-      await clearSession();
-      authSession.setUnauthenticated();
-      throw const SessionExpiredException();
+    } on AuthException catch (error) {
+      if (_isRejectedRefreshToken(error)) {
+        await clearSession();
+        authSession.setUnauthenticated();
+
+        throw const SessionExpiredException();
+      }
+
+      rethrow;
     }
     response = await send(refreshed.accessToken);
     if (response.statusCode == 401) {
@@ -299,7 +398,6 @@ class AuthService {
       refreshToken: result.refreshToken,
       userId: userId,
     );
-    AnalyticsFacade.instance.setUserId(userId);
   }
 
   void _throwForError(
@@ -405,6 +503,22 @@ class AuthService {
     debugPrint('[GOOGLE][ACCOUNT] Cuenta disponible: ${account.email}');
 
     return account;
+  }
+
+  Future<String?> getCurrentUserId() async {
+    final preferences = await SharedPreferences.getInstance();
+
+    final accessToken = preferences.getString('access_token');
+
+    if (accessToken == null || accessToken.isEmpty) {
+      return null;
+    }
+
+    return AnalyticsFacade.instance.decodeUserId(accessToken);
+  }
+
+  bool _isRejectedRefreshToken(AuthException error) {
+    return [400, 401, 403].contains(error.statusCode);
   }
 }
 
