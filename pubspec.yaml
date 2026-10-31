@@ -25,7 +25,7 @@ dependencies:
   dio_cache_interceptor: 4.0.7
   http_cache_file_store: 2.0.2
   connectivity_plus: 6.1.5
-  cached_network_image: ^4.0.6
+  cached_network_image: 4.0.3
   flutter_cache_manager: ^3.4.6
 
 
