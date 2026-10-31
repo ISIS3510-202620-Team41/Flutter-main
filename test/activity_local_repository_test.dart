@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -24,6 +25,7 @@ void main() {
   });
 
   tearDown(() async {
+    await repository.dispose();
     await appDatabase.close();
   });
 
@@ -104,5 +106,41 @@ void main() {
     final result = await repository.getAll();
 
     expect(result.length, 2);
+  });
+  test('watchAll emits initial data and updates after insert', () async {
+    final firstEmission =
+        Completer<List<ActivityRecord>>();
+
+    final secondEmission =
+        Completer<List<ActivityRecord>>();
+
+    var emissions = 0;
+
+    final subscription = repository.watchAll().listen((records) {
+      if (emissions == 0 && !firstEmission.isCompleted) {
+        firstEmission.complete(records);
+      } else if (emissions == 1 &&
+          !secondEmission.isCompleted) {
+        secondEmission.complete(records);
+      }
+
+      emissions++;
+    });
+
+    // 1. El stream debe emitir inicialmente una lista vacía.
+    final initialRecords = await firstEmission.future;
+
+    expect(initialRecords, isEmpty);
+
+    // 2. Insertamos una actividad.
+    await repository.insert(activity);
+
+    // 3. El stream debe emitir la nueva lista.
+    final updatedRecords = await secondEmission.future;
+
+    expect(updatedRecords, hasLength(1));
+    expect(updatedRecords.first.id, activity.id);
+
+    await subscription.cancel();
   });
 }

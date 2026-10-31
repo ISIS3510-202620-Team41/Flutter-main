@@ -171,11 +171,6 @@ class HomeViewModel extends ChangeNotifier {
       isLoadingRecommendations = false;
       notifyListeners();
 
-      // Mantenemos las actividades actuales si no hay conexion
-      if (_connectivityService.isOnline == false) {
-        return;
-      }
-
       // Consultamos al backend para obtener las recomendaciones más recientes
       final batch = await _activityService.getRecommendations(
         lat: where.lat,

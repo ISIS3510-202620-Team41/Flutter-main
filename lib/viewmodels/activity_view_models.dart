@@ -124,6 +124,33 @@ class ActivitiesViewModel extends ChangeNotifier {
     }
   }
 
+  String? get locationWarning {
+    switch (locationIssue) {
+      case LocationIssue.serviceDisabled:
+        return 'El GPS está desactivado.';
+
+      case LocationIssue.permissionDenied:
+        return 'El permiso de ubicación fue denegado.';
+
+      case LocationIssue.permissionDeniedForever:
+        return 'Necesitas habilitar el permiso de ubicación.';
+
+      case LocationIssue.unavailable:
+        return 'No fue posible obtener la ubicación actual.';
+
+      case null:
+        return null;
+    }
+  }
+
+  Future<bool> openAppSettings() {
+    return _locationService.openAppSettings();
+  }
+
+  Future<bool> openLocationSettings() {
+    return _locationService.openLocationSettings();
+  }
+
   void setQuery(String value) {
     query = value;
     notifyListeners();
