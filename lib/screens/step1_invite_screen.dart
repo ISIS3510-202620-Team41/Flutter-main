@@ -6,7 +6,9 @@ import '../viewmodels/friends_view_model.dart';
 import '../navigation/app_routes.dart';
 
 class Step1InviteScreen extends StatefulWidget {
-  const Step1InviteScreen({super.key});
+  const Step1InviteScreen({super.key, this.source});
+
+  final String? source;
 
   @override
   State<Step1InviteScreen> createState() => _Step1InviteScreenState();
@@ -14,8 +16,13 @@ class Step1InviteScreen extends StatefulWidget {
 
 class _Step1InviteScreenState extends State<Step1InviteScreen> {
   final List<String> friends = ['Alex', 'Sam', 'Jordan', 'Daniel Duplat', 'María Díaz'];
-  final _viewModel = ActivityCreationViewModel();
+  late final ActivityCreationViewModel _viewModel;
 
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = ActivityCreationViewModel(source: widget.source);
+  }
   String initialsOf(String name) {
     final parts = name.split(' ');
     if (parts.length == 1) return parts[0][0];

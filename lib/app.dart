@@ -219,9 +219,12 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                     builder: (_) => const RegisterScreen(),
                   );
                 case AppRoutes.createActivity:
+                  final args = settings.arguments;
                   return MaterialPageRoute<void>(
                     settings: settings,
-                    builder: (_) => const Step1InviteScreen(),
+                    builder: (_) => Step1InviteScreen(
+                      source: args is Map ? args['source'] as String? : null,
+                    ),
                   );
                 case AppRoutes.activityCreated:
                   final args = settings.arguments as Map<String, dynamic>;

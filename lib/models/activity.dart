@@ -118,11 +118,13 @@ class FriendStatus {
     required this.initials,
     required this.name,
     required this.status,
+    this.email,
     this.statusInMinutes = false,
   });
 
   final String initials;
   final String name;
   final String status;
+  final String? email;
   final bool statusInMinutes;
 }

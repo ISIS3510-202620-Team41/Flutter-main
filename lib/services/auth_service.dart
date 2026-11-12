@@ -397,6 +397,7 @@ class AuthService {
       refreshToken: result.refreshToken,
       userId: userId,
     );
+    AnalyticsFacade.instance.setUserId(userId);
   }
 
   void _throwForError(

@@ -14,6 +14,9 @@ class FriendsViewModel extends ChangeNotifier {
 
   final FriendsService _friendsService;
 
+  List<FriendStatus> _friends = const [];
+  bool isLoading = true;
+  String? errorMessage;
   String query = '';
 
   List<FriendStatus> get visibleFriends {
@@ -29,12 +32,27 @@ class FriendsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 /// Consulta /friends/gaps para que el backend registre el evento "viewed"
-Future<void> load() async {
-  try {
-    await _friendsService.loadAvailableFriends();
-  } catch (_) {
+  Future<void> load() async {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+        _friends = await _friendsService.loadAvailableFriends();
+    } catch (_) {
+        errorMessage = 'No pudimos cargar tus amigos.';
+    } finally {
+        isLoading = false;
+        notifyListeners();
+    }
   }
-}
+  Future<String?> sendRequest(String email) async {
+    try {
+      await _friendsService.sendRequest(email.trim());
+      return null;
+    } catch (_) {
+      return 'No pudimos enviar la solicitud.';
+    }
+  }
 }
 
 class ActivityCreationViewModel extends ChangeNotifier {
@@ -42,12 +60,14 @@ class ActivityCreationViewModel extends ChangeNotifier {
     List<String>? initialFriends,
     ActivityRepository? repository,
     DateTime Function()? now,
+    this.source,
   })  : selectedFriends = [...(initialFriends ?? const ['Alex'])],
         _repository = repository ?? ActivityRepository(),
         _now = now ?? DateTime.now;
 
   final ActivityRepository _repository;
   final DateTime Function() _now;
+  final String? source;
 
   final List<String> selectedFriends;
   CategoryOption? selectedCategory;
@@ -96,7 +116,7 @@ class ActivityCreationViewModel extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      final result = await _repository.create(_buildDraft());
+      final result = await _repository.create(_buildDraft(), source: source);
       createdActivity = result.activity;
       savedOffline = result.savedOffline;
       return true;
