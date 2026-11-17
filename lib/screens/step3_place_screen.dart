@@ -4,7 +4,6 @@ import '../widgets/step_header.dart';
 import 'activity_created_screen.dart';
 import '../viewmodels/friends_view_model.dart';
 import '../navigation/app_routes.dart';
-import '../models/activity_draft.dart';
 
 class Step3PlaceScreen extends StatefulWidget {
   const Step3PlaceScreen({super.key, required this.viewModel});
