@@ -5,7 +5,7 @@ import '../models/activity_record.dart';
 import '../theme/app_theme.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/map_preview.dart';
-import '../viewmodels/activity_view_models.dart';
+import '../viewmodels/activity_view_model.dart';
 
 class ActivityDetailScreen extends StatefulWidget {
   const ActivityDetailScreen({

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llamalla/models/activity_record.dart';
 import 'package:llamalla/services/activity_service.dart';
-import 'package:llamalla/viewmodels/activity_view_models.dart';
+import 'package:llamalla/viewmodels/activity_view_model.dart';
 
 class _FakeActivityService extends ActivityService {
   _FakeActivityService({

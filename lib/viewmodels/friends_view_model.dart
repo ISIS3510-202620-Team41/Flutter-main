@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/mock_data.dart';
 import '../models/activity.dart';
 import '../services/friends_service.dart';
 import '../models/activity_draft.dart';
@@ -21,8 +20,8 @@ class FriendsViewModel extends ChangeNotifier {
 
   List<FriendStatus> get visibleFriends {
     final normalized = query.trim().toLowerCase();
-    if (normalized.isEmpty) return friends;
-    return friends
+    if (normalized.isEmpty) return _friends;
+    return _friends
         .where((friend) => friend.name.toLowerCase().contains(normalized))
         .toList(growable: false);
   }
