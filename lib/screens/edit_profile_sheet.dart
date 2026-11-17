@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/media_url.dart';
 
 void showEditProfile({
   required BuildContext context,
   required String currentName,
   required String currentDescription,
-  required Future<void> Function(String name, String description) onSave,
+  required Future<String?> Function(String name, String description) onSave,
   String? currentAvatarUrl,
   required Future<String?> Function() onTakePhoto,
 }) {
@@ -29,7 +30,7 @@ void showEditProfile({
 class EditProfileContent extends StatefulWidget {
   final String currentName;
   final String currentDescription;
-  final Future<void> Function(String, String) onSave;
+  final Future<String?> Function(String, String) onSave;
   final String? currentAvatarUrl;
   final Future<String?> Function() onTakePhoto;
 
@@ -52,11 +53,13 @@ class _EditProfileContentState extends State<EditProfileContent> {
   final urlController = TextEditingController();
   String? avatarUrl;
   bool uploadingPhoto = false;
+  bool saving = false;
+  String? formError; // error que se muestra dentro del sheet
 
   @override
   void initState() {
     super.initState();
-    // Start with what the profile already had
+    // Empieza con el perfil que ya tenía
     avatarUrl = widget.currentAvatarUrl;
     nameController = TextEditingController(text: widget.currentName);
     descriptionController = TextEditingController(
@@ -74,12 +77,43 @@ class _EditProfileContentState extends State<EditProfileContent> {
 
   Future<void> _takePhoto() async {
     if (uploadingPhoto) return;
-    setState(() => uploadingPhoto = true);
-    final newUrl = await widget.onTakePhoto();
+    setState(() {
+      uploadingPhoto = true;
+      formError = null;
+    });
+    String? newUrl;
+    String? error;
+    try {
+      newUrl = await widget.onTakePhoto();
+    } catch (e) {
+      error = e.toString();
+    }
     if (!mounted) return;
     setState(() {
       uploadingPhoto = false;
+      formError = error;
       if (newUrl != null) avatarUrl = newUrl;
+    });
+  }
+
+  // Guarda y cierra el sheet. Si falla, muestra el error acá mismo
+  Future<void> _save() async {
+    setState(() {
+      saving = true;
+      formError = null;
+    });
+    final error = await widget.onSave(
+      nameController.text,
+      descriptionController.text,
+    );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context);
+      return;
+    }
+    setState(() {
+      saving = false;
+      formError = error;
     });
   }
 
@@ -139,7 +173,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Edit profile',
+                  'Editar perfil',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 GestureDetector(
@@ -244,6 +278,17 @@ class _EditProfileContentState extends State<EditProfileContent> {
               onChanged: (_) => setState(() {}),
               decoration: fieldStyle(),
             ),
+            if (formError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  formError!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.rosewood,
+                  ),
+                ),
+              ),
             const SizedBox(height: 14),
             const Text(
               'DESCRIPCIÓN',
