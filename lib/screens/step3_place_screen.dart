@@ -18,6 +18,12 @@ class Step3PlaceScreen extends StatefulWidget {
 class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
   ActivityCreationViewModel get _viewModel => widget.viewModel;
 
+  @override
+  void initState() {
+    super.initState();
+    _viewModel.loadPlaces();
+  }
+
   Widget infoItem(IconData icon, String text, Color iconColor) {
     return Padding(
       padding: const EdgeInsets.only(right: 12),
@@ -64,7 +70,7 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const StepHeader(title: 'Which place?', step: 3),
+                const StepHeader(title: '¿Qué lugar?', step: 3),
                 const SizedBox(height: 14),
                 Row(
                   children: [
@@ -72,7 +78,7 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                       child: TextField(
                         style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
-                          hintText: 'Search the place',
+                          hintText: 'Registra el lugar',
                           hintStyle: const TextStyle(
                             color: AppColors.grey,
                             fontSize: 13,
@@ -119,9 +125,39 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
+                if (_viewModel.isLoadingPlaces)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_viewModel.placesError != null)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _viewModel.placesError!,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _viewModel.loadPlaces,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  )
+                else if (_viewModel.visiblePlaces.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 24),
+                      child: Center(
+                        child: Text(
+                          'No places found nearby.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
                 Expanded(
                   child: ListView(
-                    children: availablePlaces.map((place) {
+                    children: _viewModel.visiblePlaces.map((place) {
                       final isActive =
                           _viewModel.selectedPlace?.name == place.name;
                       return GestureDetector(

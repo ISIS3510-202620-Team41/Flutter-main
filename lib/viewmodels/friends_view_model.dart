@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/activity.dart';
 import '../services/friends_service.dart';
+import '../services/location_service.dart';
 import '../models/activity_draft.dart';
 import '../repositories/activity_repository.dart';
 import '../services/activity_service.dart';
@@ -58,13 +59,22 @@ class ActivityCreationViewModel extends ChangeNotifier {
   ActivityCreationViewModel({
     List<String>? initialFriends,
     ActivityRepository? repository,
+    FriendsService? friendsService,
+    ActivityService? activityService,
+    LocationService? locationService,
     DateTime Function()? now,
     this.source,
   })  : selectedFriends = [...(initialFriends ?? const ['Alex'])],
         _repository = repository ?? ActivityRepository(),
+        _friendsService = friendsService ?? FriendsService(),
+        _activityService = activityService ?? ActivityService(),
+        _locationService = locationService ?? LocationService(),
         _now = now ?? DateTime.now;
 
   final ActivityRepository _repository;
+  final FriendsService _friendsService;
+  final ActivityService _activityService;
+  final LocationService _locationService;
   final DateTime Function() _now;
   final String? source;
 
@@ -76,6 +86,69 @@ class ActivityCreationViewModel extends ChangeNotifier {
   String? errorMessage;
   Activity? createdActivity;
   bool savedOffline = false;
+
+  // ---------- Step 1: amigos reales ----------
+  List<FriendStatus> availableFriends = const [];
+  bool isLoadingFriends = true;
+  String? friendsError;
+
+  Future<void> loadFriends() async {
+    isLoadingFriends = true;
+    friendsError = null;
+    notifyListeners();
+    try {
+      availableFriends = await _friendsService.loadAvailableFriends();
+    } catch (_) {
+      friendsError = 'No pudimos cargar a tus amigos.';
+    } finally {
+      isLoadingFriends = false;
+      notifyListeners();
+    }
+  }
+
+  // ---------- Step 3: lugares reales (cerca de ti) ----------
+  List<PlaceOption> _places = const [];
+  bool isLoadingPlaces = true;
+  String? placesError;
+  String placeQuery = '';
+
+  List<PlaceOption> get visiblePlaces {
+    final normalized = placeQuery.trim().toLowerCase();
+    if (normalized.isEmpty) return _places;
+    return _places
+        .where((place) => place.name.toLowerCase().contains(normalized))
+        .toList(growable: false);
+  }
+
+  void setPlaceQuery(String value) {
+    placeQuery = value;
+    notifyListeners();
+  }
+
+  Future<void> loadPlaces() async {
+    isLoadingPlaces = true;
+    placesError = null;
+    notifyListeners();
+    try {
+      final result = await _locationService.current();
+      final where = result.location;
+      if (where == null) {
+        placesError = 'Turn on your location to see nearby places.';
+      } else {
+        _places = await _activityService.getNearbyPlaces(
+          lat: where.lat,
+          lon: where.lon,
+        );
+      }
+    } on ActivityException catch (error) {
+      placesError = error.message;
+    } catch (_) {
+      placesError = 'We could not load nearby places.';
+    } finally {
+      isLoadingPlaces = false;
+      notifyListeners();
+    }
+  }
 
   void toggleFriend(String friend) {
     selectedFriends.contains(friend)
@@ -123,7 +196,7 @@ class ActivityCreationViewModel extends ChangeNotifier {
       errorMessage = error.message;
       return false;
     } catch (_) {
-      errorMessage = 'We could not create the activity. Try again.';
+      errorMessage = 'No pudimos crear la actividad. Inténtalo de nuevo.';
       return false;
     } finally {
       isSubmitting = false;

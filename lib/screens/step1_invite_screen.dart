@@ -15,13 +15,13 @@ class Step1InviteScreen extends StatefulWidget {
 }
 
 class _Step1InviteScreenState extends State<Step1InviteScreen> {
-  final List<String> friends = ['Alex', 'Sam', 'Jordan', 'Daniel Duplat', 'María Díaz'];
+
   late final ActivityCreationViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
-    _viewModel = ActivityCreationViewModel(source: widget.source);
+    _viewModel = ActivityCreationViewModel(source: widget.source)..loadFriends();
   }
   String initialsOf(String name) {
     final parts = name.split(' ');
@@ -51,9 +51,9 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const StepHeader(title: 'Who are you inviting?', step: 1),
+              const StepHeader(title: '¿A quién quieres invitar?', step: 1),
               const SizedBox(height: 14),
-              Text('Selected (${_viewModel.selectedFriends.length})',
+              Text('Selecciona (${_viewModel.selectedFriends.length})',
                   style: const TextStyle(fontSize: 12, color: AppColors.grey)),
               const SizedBox(height: 8),
               Wrap(
@@ -94,9 +94,40 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
                 }).toList(),
               ),
               const SizedBox(height: 12),
+              if (_viewModel.isLoadingFriends)
+                const Padding(
+                  padding: EdgeInsets.only(top: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_viewModel.friendsError != null)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _viewModel.friendsError!,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _viewModel.loadFriends,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  )
+              else if (_viewModel.availableFriends.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 24),
+                    child: Center(
+                      child: Text(
+                        'Ninguno de tus amigos está libre en este momento',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
               Expanded(
                 child: ListView(
-                  children: friends.map((name) {
+                  children: _viewModel.availableFriends.map((friend) {
+                    final name = friend.name;
                     final isActive = _viewModel.selectedFriends.contains(name);
                     return GestureDetector(
                       onTap: () => toggle(name),
