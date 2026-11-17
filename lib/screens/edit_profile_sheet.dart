@@ -59,7 +59,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
   @override
   void initState() {
     super.initState();
-    // Empieza con el perfil que ya tenía
+    // Start with what the profile already had
     avatarUrl = widget.currentAvatarUrl;
     nameController = TextEditingController(text: widget.currentName);
     descriptionController = TextEditingController(
@@ -97,6 +97,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
   }
 
   // Guarda y cierra el sheet. Si falla, muestra el error acá mismo
+  // (un SnackBar quedaría escondido detrás del sheet).
   Future<void> _save() async {
     setState(() {
       saving = true;
@@ -140,11 +141,11 @@ class _EditProfileContentState extends State<EditProfileContent> {
     final initials = nameController.text.trim().isEmpty
         ? '?'
         : nameController.text
-              .trim()
-              .split(' ')
-              .take(2)
-              .map((p) => p[0].toUpperCase())
-              .join();
+        .trim()
+        .split(' ')
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -173,7 +174,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Editar perfil',
+                  'Edit profile',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 GestureDetector(
@@ -190,7 +191,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
                     radius: 38,
                     backgroundColor: AppColors.blue,
                     backgroundImage:
-                    avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+                    avatarUrl != null ? NetworkImage(resolveMediaUrl(avatarUrl)!) : null,
                     child: avatarUrl != null
                         ? null
                         : Text(
@@ -278,17 +279,6 @@ class _EditProfileContentState extends State<EditProfileContent> {
               onChanged: (_) => setState(() {}),
               decoration: fieldStyle(),
             ),
-            if (formError != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  formError!,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.rosewood,
-                  ),
-                ),
-              ),
             const SizedBox(height: 14),
             const Text(
               'DESCRIPCIÓN',
@@ -304,16 +294,22 @@ class _EditProfileContentState extends State<EditProfileContent> {
               maxLines: 3,
               decoration: fieldStyle(),
             ),
+            if (formError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  formError!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.rosewood,
+                  ),
+                ),
+              ),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () async {
-                  await widget.onSave(
-                    nameController.text,
-                    descriptionController.text,
-                  );
-                },
+                onPressed: saving ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.rosewood,
                   foregroundColor: Colors.white,
@@ -322,7 +318,16 @@ class _EditProfileContentState extends State<EditProfileContent> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
+                child: saving
+                    ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                    : const Text(
                   'Guardar cambios',
                   style: TextStyle(fontSize: 15),
                 ),
