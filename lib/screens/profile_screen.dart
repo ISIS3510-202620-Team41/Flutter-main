@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../viewmodels/profile_view_model.dart';
 import 'edit_profile_sheet.dart';
 import '../services/photo_storage_service.dart';
+import '../utils/media_url.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -71,66 +72,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
       currentDescription: _profile?.bio ?? '',
       currentAvatarUrl: _profile?.avatarUrl,
       onTakePhoto: _takeProfilePhoto,
+      // Devuelve null si guardó bien, o el mensaje de error para mostrarlo
+      // dentro del sheet.
       onSave: (newName, newDescription) async {
-        try {
-          final profile = await _profileViewModel.updateProfile(
-            name: newName.trim(),
-            bio: newDescription.trim(),
-          );
-          if (mounted && profile != null) setState(() => _profile = profile);
-          if (profile == null && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  _profileViewModel.errorMessage ??
-                      'No pudimos actualizar tu perfil.',
-                ),
-              ),
-            );
-          }
-        } on ProfileException catch (error) {
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(error.message)));
-          }
+        final profile = await _profileViewModel.updateProfile(
+          name: newName.trim(),
+          bio: newDescription.trim(),
+        );
+        if (profile == null) {
+          return _profileViewModel.errorMessage ??
+              'No pudimos actualizar tu perfil.';
         }
+        if (mounted) setState(() => _profile = profile);
+        return null;
       },
     );
   }
 
+  // Abre la cámara, guarda una copia privada y la sube al backend.
+  // Devuelve la URL nueva, o null si el usuario canceló. Si algo falla lanza
+  // un ProfileException con el mensaje; el sheet lo muestra.
   Future<String?> _takeProfilePhoto() async {
+    XFile? photo;
     try {
-      final photo = await _picker.pickImage(
+      photo = await _picker.pickImage(
         source: ImageSource.camera,
         maxWidth: 1024, // el backend la reduce a 512 igual y acepta hasta 5 MB
         imageQuality: 85,
         preferredCameraDevice: CameraDevice.front,
       );
-      if (photo == null) return null; // el usuario canceló
-      // Se crea una copia privada
-      final saved = await PhotoStorageService().savePhoto(photo.path);
-      final profile = await _profileViewModel.uploadAvatar(saved.path);
-      if (mounted && profile != null) setState(() => _profile = profile);
-      if (profile == null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _profileViewModel.errorMessage ??
-                  'No pudimos subir la foto de perfil.',
-            ),
-          ),
-        );
-      }
-      return profile?.avatarUrl;
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No pudimos abrir la cámara.')),
-        );
-      }
+      throw const ProfileException('No pudimos abrir la cámara.');
     }
-    return null;
+    if (photo == null) return null; // el usuario canceló
+
+    String savedPath;
+    try {
+      savedPath = (await PhotoStorageService().savePhoto(photo.path)).path;
+    } catch (_) {
+      throw const ProfileException('No pudimos guardar la foto en tu teléfono.');
+    }
+
+    final profile = await _profileViewModel.uploadAvatar(savedPath);
+    if (profile == null) {
+      throw ProfileException(
+        _profileViewModel.errorMessage ?? 'No pudimos subir la foto de perfil.',
+      );
+    }
+    if (mounted) setState(() => _profile = profile);
+    return profile.avatarUrl;
   }
 
   Future<void> _loadProfile() async {
@@ -210,20 +200,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         gaps.add(result);
 
         final freeRanges = result.free.map((gap) {
-        final start = gap.start.toLocal();
-        final end = gap.end.toLocal();
+          final start = gap.start.toLocal();
+          final end = gap.end.toLocal();
 
-        return '${_time(start)} - ${_time(end)}';
+          return '${_time(start)} - ${_time(end)}';
         }).join(' | ');
 
         debugPrint(
-        '[SCHEDULE][GAPS][DATA] '
-        'requested=${date.toString().split(' ').first} '
-        'response=${result.date.toString().split(' ').first} '
-        'timezone=${result.timezone} '
-        'freeCount=${result.free.length} '
-        'ranges=[$freeRanges]',
-      );
+          '[SCHEDULE][GAPS][DATA] '
+              'requested=${date.toString().split(' ').first} '
+              'response=${result.date.toString().split(' ').first} '
+              'timezone=${result.timezone} '
+              'freeCount=${result.free.length} '
+              'ranges=[$freeRanges]',
+        );
 
         debugPrint('[SCHEDULE] Horario cargado: $date');
       } catch (error, stackTrace) {
@@ -237,7 +227,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     debugPrint(
       '[SCHEDULE][FINAL] Días cargados: '
-      '${gaps.length}/${_weekdays.length}',
+          '${gaps.length}/${_weekdays.length}',
     );
   }
 
@@ -269,11 +259,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (authCode == null || authCode.isEmpty) {
         throw const ScheduleException(
           'Google no devolvió un código de autorización del servidor. '
-          'Comprueba el Client ID OAuth web y la configuración de Google.',
+              'Comprueba el Client ID OAuth web y la configuración de Google.',
         );
       }
 
-    // El authcode no se imprime por consola por temas de seguridad
+      // El authcode no se imprime por consola por temas de seguridad
       debugPrint('[CALENDAR][4] Código recibido; enviando al backend');
 
       final result = await _scheduleService.syncGoogle(
@@ -283,9 +273,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       debugPrint('[CALENDAR][5] Sincronización aceptada por el backend');
       debugPrint(
         '[CALENDAR][5] Resultado: '
-        'importados=${result.imported}, '
-        'ignorados=${result.skippedEvents}, '
-        'calendarios=${result.calendars}',
+            'importados=${result.imported}, '
+            'ignorados=${result.skippedEvents}, '
+            'calendarios=${result.calendars}',
       );
 
       await _loadSchedule();
@@ -296,20 +286,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Navigator.pop(context);
       }
     } on GoogleSignInException catch (error, stackTrace) { //Catch de error por SignIn
-    debugPrint('[CALENDAR][ERROR][GOOGLE]');
-    debugPrint('Código: ${error.code}');
-    debugPrint('Descripción: ${error.description}');
-    debugPrintStack(stackTrace: stackTrace);
+      debugPrint('[CALENDAR][ERROR][GOOGLE]');
+      debugPrint('Código: ${error.code}');
+      debugPrint('Descripción: ${error.description}');
+      debugPrintStack(stackTrace: stackTrace);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Error de Google: ${error.description ?? error.code.name}',
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error de Google: ${error.description ?? error.code.name}',
+            ),
           ),
-        ),
-      );
-    }
+        );
+      }
     } on ScheduleException catch (error, stackTrace) { //Catch de error Schedule
       debugPrint('[CALENDAR][ERROR][SCHEDULE]');
       debugPrint('HTTP: ${error.statusCode}');
@@ -341,7 +331,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SnackBar(
             content: Text(
               'Falló la conexión con Google Calendar. '
-              'Revisa los registros de depuración.',
+                  'Revisa los registros de depuración.',
             ),
           ),
         );
@@ -396,7 +386,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } on ScheduleException catch (error, stackTrace) {
       debugPrint(
         '[CALENDAR][REFRESH][ERROR] '
-        'HTTP ${error.statusCode}: ${error.message}',
+            'HTTP ${error.statusCode}: ${error.message}',
       );
       debugPrintStack(stackTrace: stackTrace);
 
@@ -512,10 +502,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .where((segment) => segment.isFree)
         .map(
           (segment) => FreeInterval(
-            start: segment.start,
-            end: segment.end,
-          ),
-        )
+        start: segment.start,
+        end: segment.end,
+      ),
+    )
         .toList(growable: false);
     final freeWindows = freeIntervals.length;
 
@@ -548,16 +538,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             backgroundColor: AppColors.blue,
                             backgroundImage: _profile?.avatarUrl == null
                                 ? null
-                                : NetworkImage(_profile!.avatarUrl!),
+                                : NetworkImage(resolveMediaUrl(_profile!.avatarUrl)!),
                             child: _profile?.avatarUrl == null
                                 ? Text(
-                                    initials,
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  )
+                              initials,
+                              style: const TextStyle(
+                                fontSize: 22,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            )
                                 : null,
                           ),
                           Positioned(
@@ -785,9 +775,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   List<_ScheduleSegment> _buildScheduleSegments(
-    DateTime date,
-    DayGaps? dayGaps,
-  ) {
+      DateTime date,
+      DayGaps? dayGaps,
+      ) {
     if (dayGaps == null) return const [];
 
     // Estos límites corresponden a app.schedule.day-start/day-end del backend.
@@ -964,7 +954,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _hoursFor(List<FreeInterval> gaps) {
     final minutes = gaps.fold<int>(
       0,
-      (total, gap) => total + gap.end.difference(gap.start).inMinutes,
+          (total, gap) => total + gap.end.difference(gap.start).inMinutes,
     );
     return '${(minutes / 60).toStringAsFixed(1)}h';
   }

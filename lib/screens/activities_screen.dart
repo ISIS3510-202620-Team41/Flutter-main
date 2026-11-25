@@ -7,7 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/header.dart';
 import '../widgets/info_chip.dart';
 import '../widgets/map_preview.dart';
-import '../viewmodels/activity_view_models.dart';
+import '../viewmodels/activity_view_model.dart';
 import '../widgets/pending_sync_badge.dart';
 import '../widgets/category_preferences_sheet.dart';
 

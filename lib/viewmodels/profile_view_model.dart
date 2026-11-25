@@ -47,6 +47,8 @@ class ProfileViewModel extends ChangeNotifier {
       errorMessage = error.message;
     } on FormatException catch (error) {
       errorMessage = error.message;
+    } catch (_) {
+      errorMessage = 'No pudimos conectar con el servidor. Revisa tu conexión.';
     } finally {
       isSaving = false;
       notifyListeners();
@@ -65,6 +67,8 @@ class ProfileViewModel extends ChangeNotifier {
       errorMessage = error.message;
     } on FormatException catch (error) {
       errorMessage = error.message;
+    } catch (_) {
+      errorMessage = 'No pudimos conectar con el servidor. Revisa tu conexión.';
     } finally {
       isUploadingAvatar = false;
       notifyListeners();

@@ -8,6 +8,8 @@ import '../models/activity.dart';
 import '../models/activity_record.dart';
 import 'activity_image_cache_service.dart';
 import 'auth_service.dart';
+import '../models/activity_draft.dart';
+import '../utils/haversine.dart';
 
 class ActivityException implements Exception {
   const ActivityException(this.message, {this.statusCode});
@@ -160,6 +162,61 @@ class ActivityService {
       lon: calculateDistanceLocally ? lon : null,
       radiusKm: radiusKm,
     );
+  }
+  //Step 3: los lugares donde ya hay actividades cerca
+  Future<List<PlaceOption>> getNearbyPlaces({
+    required double lat,
+    required double lon,
+    double radiusKm = 50,
+  }) async {
+    final records = await _fetchNearbyRecords(
+      lat: lat,
+      lon: lon,
+      radiusKm: radiusKm,
+    );
+
+    final withDistance = records.map((record) {
+      final km = record.distanceKm ??
+          Haversine.calculateDistanceKm(
+            latitude1: lat,
+            longitude1: lon,
+            latitude2: record.latitude,
+            longitude2: record.longitude,
+          );
+      return (record: record, km: km);
+    }).toList()
+      ..sort((a, b) => (a.km ?? double.infinity).compareTo(b.km ?? double.infinity));
+
+    final places = <String, PlaceOption>{};
+    for (final item in withDistance) {
+      final record = item.record;
+      if (places.containsKey(record.locationName)) continue;
+
+      final start = DateTime.tryParse(record.startTime);
+      final end = DateTime.tryParse(record.endTime);
+      final minutes = (start != null && end != null)
+          ? end.difference(start).inMinutes
+          : 60;
+
+      places[record.locationName] = PlaceOption(
+        name: record.locationName,
+        distance: _distanceLabel(item.km),
+        durationMinutes: minutes > 0 ? minutes : 60,
+        price: record.price ?? '',
+        latitude: record.latitude,
+        longitude: record.longitude,
+        capacity: record.capacity ?? 10,
+        description: record.aboutLocation ?? '',
+        imageUrl: record.imageUrl ?? '',
+      );
+    }
+    return places.values.toList(growable: false);
+  }
+
+  String _distanceLabel(double? km) {
+    if (km == null) return '';
+    if (km < 1) return '${(km * 1000).round()} m';
+    return '${km.toStringAsFixed(1)} km';
   }
 
   Future<void> refreshNearby({
