@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../utils/media_url.dart';
 
 void showEditProfile({
   required BuildContext context,
   required String currentName,
   required String currentDescription,
-  required Future<void> Function(String name, String description) onSave,
+  required Future<String?> Function(String name, String description) onSave,
   String? currentAvatarUrl,
   required Future<String?> Function() onTakePhoto,
 }) {
@@ -29,7 +30,7 @@ void showEditProfile({
 class EditProfileContent extends StatefulWidget {
   final String currentName;
   final String currentDescription;
-  final Future<void> Function(String, String) onSave;
+  final Future<String?> Function(String, String) onSave;
   final String? currentAvatarUrl;
   final Future<String?> Function() onTakePhoto;
 
@@ -52,6 +53,8 @@ class _EditProfileContentState extends State<EditProfileContent> {
   final urlController = TextEditingController();
   String? avatarUrl;
   bool uploadingPhoto = false;
+  bool saving = false;
+  String? formError; // error que se muestra dentro del sheet
 
   @override
   void initState() {
@@ -74,12 +77,44 @@ class _EditProfileContentState extends State<EditProfileContent> {
 
   Future<void> _takePhoto() async {
     if (uploadingPhoto) return;
-    setState(() => uploadingPhoto = true);
-    final newUrl = await widget.onTakePhoto();
+    setState(() {
+      uploadingPhoto = true;
+      formError = null;
+    });
+    String? newUrl;
+    String? error;
+    try {
+      newUrl = await widget.onTakePhoto();
+    } catch (e) {
+      error = e.toString();
+    }
     if (!mounted) return;
     setState(() {
       uploadingPhoto = false;
+      formError = error;
       if (newUrl != null) avatarUrl = newUrl;
+    });
+  }
+
+  // Guarda y cierra el sheet. Si falla, muestra el error acá mismo
+  // (un SnackBar quedaría escondido detrás del sheet).
+  Future<void> _save() async {
+    setState(() {
+      saving = true;
+      formError = null;
+    });
+    final error = await widget.onSave(
+      nameController.text,
+      descriptionController.text,
+    );
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context);
+      return;
+    }
+    setState(() {
+      saving = false;
+      formError = error;
     });
   }
 
@@ -106,11 +141,11 @@ class _EditProfileContentState extends State<EditProfileContent> {
     final initials = nameController.text.trim().isEmpty
         ? '?'
         : nameController.text
-              .trim()
-              .split(' ')
-              .take(2)
-              .map((p) => p[0].toUpperCase())
-              .join();
+        .trim()
+        .split(' ')
+        .take(2)
+        .map((p) => p[0].toUpperCase())
+        .join();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -156,7 +191,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
                     radius: 38,
                     backgroundColor: AppColors.blue,
                     backgroundImage:
-                    avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+                    avatarUrl != null ? NetworkImage(resolveMediaUrl(avatarUrl)!) : null,
                     child: avatarUrl != null
                         ? null
                         : Text(
@@ -259,16 +294,22 @@ class _EditProfileContentState extends State<EditProfileContent> {
               maxLines: 3,
               decoration: fieldStyle(),
             ),
+            if (formError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  formError!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.rosewood,
+                  ),
+                ),
+              ),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () async {
-                  await widget.onSave(
-                    nameController.text,
-                    descriptionController.text,
-                  );
-                },
+                onPressed: saving ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.rosewood,
                   foregroundColor: Colors.white,
@@ -277,7 +318,16 @@ class _EditProfileContentState extends State<EditProfileContent> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
+                child: saving
+                    ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+                    : const Text(
                   'Guardar cambios',
                   style: TextStyle(fontSize: 15),
                 ),

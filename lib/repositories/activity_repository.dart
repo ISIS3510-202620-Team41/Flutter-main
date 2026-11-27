@@ -62,6 +62,8 @@ class ActivityRepository {
         final activity = await _service
             .createActivity(draft.toRequestJson(), source: source)
             .timeout(_timeout);
+
+        await _joinCreator(activity.id);
         unawaited(syncPending());
         return CreateResult(activity);
       } catch (error) {
@@ -136,7 +138,9 @@ class ActivityRepository {
           attempts: action.attempts + 1,
         );
         try {
-          await _service.createActivity(action.payload).timeout(_timeout);
+          final created =
+              await _service.createActivity(action.payload).timeout(_timeout);
+          await _joinCreator(created.id);
           await local.delete(action.activityId);
           await pending.delete(action.id);
           synced++;
@@ -163,6 +167,15 @@ class ActivityRepository {
     }
   }
 
+// El backend no inscribe al creador solo (responde participants: 0)
+  Future<void> _joinCreator(String? activityId) async {
+    if (activityId == null) return;
+    try {
+      await _service.join(activityId).timeout(_timeout);
+    } catch (_) {
+      // Puede ser un 409 (ya inscrito) o un fallo de red.
+    }
+  }
   bool _isNetworkError(Object error) =>
       error is SocketException ||
           error is TimeoutException ||

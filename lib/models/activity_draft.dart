@@ -44,30 +44,6 @@ class PlaceOption {
       : '$durationMinutes min';
 }
 
-// Lugares de prueba; más adelante provendrán del backend.
-const availablePlaces = [
-  PlaceOption(
-    name: 'Bistro',
-    distance: '500 m',
-    durationMinutes: 120,
-    price: '\$30K',
-    latitude: 4.6012,
-    longitude: -74.0655,
-    capacity: 10,
-    description: 'Restaurante cerca del campus',
-  ),
-  PlaceOption(
-    name: 'Pizza Hut',
-    distance: '0.7 km',
-    durationMinutes: 90,
-    price: '\$20K',
-    latitude: 4.6050,
-    longitude: -74.0680,
-    capacity: 8,
-    description: 'Pizzeria, ideal para grupos',
-  ),
-];
-
 //Lo necesario para crear una actividad. Se puede almacenar sin conexión.
 class ActivityDraft {
   const ActivityDraft({

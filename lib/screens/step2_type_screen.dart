@@ -30,9 +30,9 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const StepHeader(title: 'What type of activity?', step: 2),
+              const StepHeader(title: '¿Qué tipo de actividad?', step: 2),
               const SizedBox(height: 14),
-              const Text('Selected one or more',
+              const Text('Selecciona una categoría',
                   style: TextStyle(fontSize: 12, color: AppColors.grey)),
               const SizedBox(height: 10),
               Expanded(
@@ -84,7 +84,7 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Back'),
+                      child: const Text('Atrás'),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -110,7 +110,7 @@ class _Step2TypeScreenState extends State<Step2TypeScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: const Text('Next'),
+                        child: const Text('Próximo'),
                       ),
                     ),
                   ],

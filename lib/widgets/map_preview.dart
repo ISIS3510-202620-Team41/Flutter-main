@@ -22,21 +22,23 @@ class MapPreview extends StatelessWidget {
           painter: _MapPainter(),
           child: Stack(
             children: [
-              Positioned(
-                left: 88,
-                top: height * 0.33,
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius: BorderRadius.circular(7),
+              Positioned.fill(
+                child: Align(
+                  alignment: const Alignment(0, -0.1),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: Text(markerLabel, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700)),
                       ),
-                      child: Text(markerLabel, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700)),
-                    ),
-                    const Icon(Icons.location_on, color: AppColors.rosewood, size: 30),
-                  ],
+                      const Icon(Icons.location_on, color: AppColors.rosewood, size: 30),
+                    ],
+                  ),
                 ),
               ),
               Positioned(
