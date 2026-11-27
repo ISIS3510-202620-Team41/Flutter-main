@@ -14,6 +14,7 @@ import '../analytics/analytics_feature_catalog.dart';
 import '../analytics/analytics_facade.dart';
 import '../database/local_database_facade.dart';
 import '../models/pending_action.dart';
+import '../repositories/joined_activities_repository.dart';
 import '../repositories/pending_actions_repository.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
@@ -28,19 +29,28 @@ class HomeViewModel extends ChangeNotifier {
     DateTime Function()? now,
     AnalyticsFacade? analyticsFacade,
     PendingActionsRepository? pendingActionsRepository,
+    JoinedActivitiesRepository? joinedActivitiesRepository,
     ConnectivityService? connectivityService,
     AuthService? authService,
     PendingActionsSyncService? syncService,
-  })  : _profileService = profileService ?? ProfileService(),
-        _scheduleService = scheduleService ?? ScheduleService(),
-        _activityService = activityService ?? ActivityService(),
-        _locationService = locationService ?? LocationService(),
-        _now = now ?? DateTime.now,
-        _analyticsFacade = analyticsFacade ?? AnalyticsFacade.instance,
-        _pendingActionsRepository = pendingActionsRepository ?? LocalDatabaseFacade.instance.pendingActions,
-        _connectivityService = connectivityService ?? ConnectivityService.instance,
-        _authService = authService ?? AuthService(),
-        _syncService = syncService ?? PendingActionsSyncService.instance { _syncSubscription = _syncService.onActionSynced.listen(_onActionSynced);}
+  }) : _profileService = profileService ?? ProfileService(),
+       _scheduleService = scheduleService ?? ScheduleService(),
+       _activityService = activityService ?? ActivityService(),
+       _locationService = locationService ?? LocationService(),
+       _now = now ?? DateTime.now,
+       _analyticsFacade = analyticsFacade ?? AnalyticsFacade.instance,
+       _pendingActionsRepository =
+           pendingActionsRepository ??
+           LocalDatabaseFacade.instance.pendingActions,
+       _joinedActivitiesRepository =
+           joinedActivitiesRepository ??
+           LocalDatabaseFacade.instance.joinedActivities,
+       _connectivityService =
+           connectivityService ?? ConnectivityService.instance,
+       _authService = authService ?? AuthService(),
+       _syncService = syncService ?? PendingActionsSyncService.instance {
+    _syncSubscription = _syncService.onActionSynced.listen(_onActionSynced);
+  }
 
   final ProfileService _profileService;
   final ScheduleService _scheduleService;
@@ -49,6 +59,7 @@ class HomeViewModel extends ChangeNotifier {
   final AnalyticsFacade _analyticsFacade;
   final DateTime Function() _now;
   final PendingActionsRepository? _pendingActionsRepository;
+  final JoinedActivitiesRepository? _joinedActivitiesRepository;
   final ConnectivityService _connectivityService;
   final AuthService _authService;
   final PendingActionsSyncService _syncService;
@@ -81,7 +92,7 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   bool isActivityPending(String activityId) {
-  return _pendingActivityIds.contains(activityId);
+    return _pendingActivityIds.contains(activityId);
   }
 
   int get freeMinutes {
@@ -116,9 +127,7 @@ class HomeViewModel extends ChangeNotifier {
       networkQuality = classifyNetworkQuality(probe.elapsed);
 
       final now = _now();
-      final upcoming = gaps.free
-          .where((gap) => gap.end.isAfter(now))
-          .toList()
+      final upcoming = gaps.free.where((gap) => gap.end.isAfter(now)).toList()
         ..sort((a, b) => a.start.compareTo(b.start));
 
       nextFreeInterval = upcoming.isEmpty ? null : upcoming.first;
@@ -143,8 +152,7 @@ class HomeViewModel extends ChangeNotifier {
 
     // Mostramos las actividades almacenadas en cache mientras obtenemos la ubicación y consultamos el backend.
     try {
-      recommendations =
-          await _activityService.getCachedActivities();
+      recommendations = await _activityService.getCachedActivities();
 
       recommendationId = null;
       recommendationFreeMinutes = null;
@@ -162,22 +170,20 @@ class HomeViewModel extends ChangeNotifier {
       // No hacemos consultas cercanas si no tenemos ubicacion
       if (where == null) {
         if (recommendations.isEmpty) {
-          recommendationsError =
-              _locationIssueMessage(locationResult.issue);
+          recommendationsError = _locationIssueMessage(locationResult.issue);
         }
 
         return;
       }
 
-      recommendations =
-          await _activityService.getCachedActivities(
+      recommendations = await _activityService.getCachedActivities(
         lat: where.lat,
         lon: where.lon,
       );
 
       isLoadingRecommendations = false;
       notifyListeners();
-      
+
       // Esperamos la medición de red para enviar networkQuality al backend.
       await _networkProbe.future;
 
@@ -196,12 +202,14 @@ class HomeViewModel extends ChangeNotifier {
       recommendationFreeMinutes = batch.freeMinutes;
 
       // BQ10: tiempo de carga de la pantalla de recomendaciones
-      unawaited(_analyticsFacade.trackAppLoadingTime(
-        loadType: 'screen',
-        screen: 'recommendations',
-        duration: watch.elapsed,
-        networkQuality: networkQuality,
-      ));
+      unawaited(
+        _analyticsFacade.trackAppLoadingTime(
+          loadType: 'screen',
+          screen: 'recommendations',
+          duration: watch.elapsed,
+          networkQuality: networkQuality,
+        ),
+      );
       recommendationsError = null;
     } on ActivityException catch (error) {
       if (recommendations.isEmpty) {
@@ -209,15 +217,13 @@ class HomeViewModel extends ChangeNotifier {
       }
     } catch (_) {
       if (recommendations.isEmpty) {
-        recommendationsError =
-            'No pudimos cargar las recomendaciones.';
+        recommendationsError = 'No pudimos cargar las recomendaciones.';
       }
     } finally {
       isLoadingRecommendations = false;
       notifyListeners();
     }
-   }
-  
+  }
 
   Future<bool> choose(Activity activity) async {
     final id = activity.id;
@@ -269,6 +275,8 @@ class HomeViewModel extends ChangeNotifier {
         rethrow;
       }
 
+      await _recordConfirmedJoin(id);
+
       // Inscripcion confirmada por el back
       try {
         await _analyticsFacade.trackFeatureUsed(
@@ -278,8 +286,7 @@ class HomeViewModel extends ChangeNotifier {
         );
       } catch (_) {}
 
-      recommendations =
-          recommendations.where((a) => a.id != id).toList();
+      recommendations = recommendations.where((a) => a.id != id).toList();
 
       notifyListeners();
 
@@ -301,8 +308,7 @@ class HomeViewModel extends ChangeNotifier {
 
   Future<void> _loadPendingActions() async {
     try {
-      final userId = _currentUserId ??
-          await _authService.getCurrentUserId();
+      final userId = _currentUserId ?? await _authService.getCurrentUserId();
 
       if (userId == null) return;
 
@@ -318,16 +324,12 @@ class HomeViewModel extends ChangeNotifier {
         ..clear()
         ..addAll(
           actions
-              .where(
-                (action) =>
-                    action.type == PendingActionType.joinActivity,
-              )
+              .where((action) => action.type == PendingActionType.joinActivity)
               .map((action) => action.activityId),
         );
 
       notifyListeners();
-    } catch (_) {
-    }
+    } catch (_) {}
   }
 
   Future<bool> _queueJoin(Activity activity) async {
@@ -335,8 +337,7 @@ class HomeViewModel extends ChangeNotifier {
 
     if (activityId == null) return false;
 
-    final userId = _currentUserId ??
-        await _authService.getCurrentUserId();
+    final userId = _currentUserId ?? await _authService.getCurrentUserId();
 
     if (userId == null) {
       actionMessage = 'No pudimos identificar tu sesión.';
@@ -345,8 +346,9 @@ class HomeViewModel extends ChangeNotifier {
     }
 
     final repository = _pendingActionsRepository;
+    final joinedRepository = _joinedActivitiesRepository;
 
-    if (repository == null) {
+    if (repository == null && joinedRepository == null) {
       actionMessage = 'No pudimos acceder al almacenamiento local.';
       notifyListeners();
       return false;
@@ -360,8 +362,7 @@ class HomeViewModel extends ChangeNotifier {
       type: PendingActionType.joinActivity,
       activityId: activityId,
       payload: {
-        if (recommendationId != null)
-          'recommendationId': recommendationId,
+        if (recommendationId != null) 'recommendationId': recommendationId,
         if (recommendationFreeMinutes != null)
           'freeTimeMinutes': recommendationFreeMinutes,
       },
@@ -372,7 +373,11 @@ class HomeViewModel extends ChangeNotifier {
     );
 
     try {
-      await repository.enqueue(action);
+      if (joinedRepository != null) {
+        await joinedRepository.enqueueJoin(action);
+      } else {
+        await repository!.enqueue(action);
+      }
 
       _currentUserId = userId;
       _pendingActivityIds.add(activityId);
@@ -386,8 +391,7 @@ class HomeViewModel extends ChangeNotifier {
 
       return true;
     } catch (_) {
-      actionMessage =
-          'No pudimos guardar tu inscripción localmente.';
+      actionMessage = 'No pudimos guardar tu inscripción localmente.';
 
       notifyListeners();
 
@@ -395,9 +399,41 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> _recordConfirmedJoin(String activityId) async {
+    final repository = _joinedActivitiesRepository;
+    if (repository == null) return;
+
+    final userId = _currentUserId ?? await _authService.getCurrentUserId();
+    if (userId == null) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: StateError(
+            'The authenticated user ID was unavailable after joining.',
+          ),
+          library: 'joined activity persistence',
+        ),
+      );
+      return;
+    }
+
+    try {
+      await repository.recordConfirmedJoin(
+        userId: userId,
+        activityId: activityId,
+      );
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'joined activity persistence',
+        ),
+      );
+    }
+  }
+
   bool _isRetryableJoinError(Object error) {
-    if (error is http.ClientException ||
-        error is TimeoutException) {
+    if (error is http.ClientException || error is TimeoutException) {
       return true;
     }
 
@@ -417,8 +453,7 @@ class HomeViewModel extends ChangeNotifier {
   void _onActionSynced(PendingAction action) {
     if (action.type != PendingActionType.joinActivity) return;
 
-    if (_currentUserId != null &&
-        action.userId != _currentUserId) {
+    if (_currentUserId != null && action.userId != _currentUserId) {
       return;
     }
 

@@ -1,15 +1,41 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import '../models/activity_record.dart';
 import '../cache/activity_memory_cache.dart';
 import '../models/activity.dart';
+import '../models/storage_capacity.dart';
+import '../services/storage_capacity_service.dart';
+import '../services/storage_cleanup_service.dart';
+import '../services/storage_write_error.dart';
+
+enum ActivityWritePolicy { essential, optionalCache }
 
 class ActivityLocalRepository {
-  ActivityLocalRepository(this._database, {ActivityMemoryCache? cache})
-      : _cache = cache ?? ActivityMemoryCache();
+  ActivityLocalRepository(
+    this._database, {
+    ActivityMemoryCache? cache,
+    StorageCapacityService? capacityService,
+    StorageCleanupService? cleanupService,
+  }) : _cache = cache ?? ActivityMemoryCache(),
+       _capacityService = capacityService ?? StorageCapacityService.shared {
+    _cleanupService =
+        cleanupService ??
+        StorageCleanupService(
+          capacityService: _capacityService,
+          steps: [
+            StorageCleanupStep(
+              name: 'cached activities',
+              cleanup: clearOptionalCache,
+            ),
+          ],
+        );
+  }
 
   final Database _database;
   final ActivityMemoryCache _cache;
+  final StorageCapacityService _capacityService;
+  late final StorageCleanupService _cleanupService;
 
   // Notifica cuando cambia la tabla de actividades de la db.
   final StreamController<void> _changesController =
@@ -71,33 +97,50 @@ class ActivityLocalRepository {
       _changesController.add(null);
     }
   }
-  
-  Future<void> insert(ActivityRecord activity) async {
-    await _database.insert(
-      'activities',
-      activity.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+
+  Future<void> insert(
+    ActivityRecord activity, {
+    ActivityWritePolicy policy = ActivityWritePolicy.essential,
+  }) async {
+    if (policy == ActivityWritePolicy.optionalCache) {
+      await _ensureCapacity([activity]);
+    }
+    await runStorageWrite('activity insert', () async {
+      await _database.insert(
+        'activities',
+        activity.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
     _cache.put(activity);
 
     _notifyActivitiesChanged();
   }
 
-  Future<void> upsertAll(List<ActivityRecord> activities) async {
+  Future<void> upsertAll(
+    List<ActivityRecord> activities, {
+    ActivityWritePolicy policy = ActivityWritePolicy.optionalCache,
+  }) async {
     if (activities.isEmpty) return;
 
-    await _database.transaction((txn) async {
-      final batch = txn.batch();
+    if (policy == ActivityWritePolicy.optionalCache) {
+      await _ensureCapacity(activities);
+    }
 
-      for (final activity in activities) {
-        batch.insert(
-          'activities',
-          activity.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
+    await runStorageWrite('activity batch upsert', () async {
+      await _database.transaction((txn) async {
+        final batch = txn.batch();
 
-      await batch.commit(noResult: true);
+        for (final activity in activities) {
+          batch.insert(
+            'activities',
+            activity.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+
+        await batch.commit(noResult: true);
+      });
     });
     _cache.putAll(activities);
 
@@ -131,9 +174,7 @@ class ActivityLocalRepository {
     return result.map(ActivityRecord.fromMap).toList();
   }
 
-  Future<List<ActivityRecord>> getByCategory(
-    String category,
-  ) async {
+  Future<List<ActivityRecord>> getByCategory(String category) async {
     final result = await _database.query(
       'activities',
       where: 'category = ?',
@@ -156,13 +197,21 @@ class ActivityLocalRepository {
     return result.map(ActivityRecord.fromMap).toList();
   }
 
-  Future<int> update(ActivityRecord activity) async {
-    final rows = await _database.update(
-      'activities',
-      activity.toMap(),
-      where: 'id = ?',
-      whereArgs: [activity.id],
-    );
+  Future<int> update(
+    ActivityRecord activity, {
+    ActivityWritePolicy policy = ActivityWritePolicy.essential,
+  }) async {
+    if (policy == ActivityWritePolicy.optionalCache) {
+      await _ensureCapacity([activity]);
+    }
+    final rows = await runStorageWrite('activity update', () {
+      return _database.update(
+        'activities',
+        activity.toMap(),
+        where: 'id = ?',
+        whereArgs: [activity.id],
+      );
+    });
 
     if (rows > 0) {
       _cache.put(activity);
@@ -172,12 +221,35 @@ class ActivityLocalRepository {
     return rows;
   }
 
-  Future<int> delete(String id) async {
-    final rows = await _database.delete(
-      'activities',
-      where: 'id = ?',
-      whereArgs: [id],
+  Future<void> _ensureCapacity(List<ActivityRecord> activities) async {
+    final estimatedBytes = activities.fold<int>(
+      0,
+      (total, activity) =>
+          total + utf8.encode(jsonEncode(activity.toMap())).length + 128,
     );
+    final capacity = await _cleanupService.makeRoomForOptionalWrite(
+      estimatedWriteBytes: estimatedBytes,
+    );
+    if (capacity.status == StorageCapacityStatus.sufficient) return;
+
+    final failure = StorageWriteException(
+      kind: capacity.status == StorageCapacityStatus.insufficient
+          ? StorageFailureKind.capacity
+          : capacity.failureKind ?? StorageFailureKind.provider,
+      operation: 'optional activity cache write',
+      cause: StateError(
+        capacity.errorMessage ??
+            'Insufficient storage for optional activity data.',
+      ),
+    );
+    reportStorageFailure(failure, StackTrace.current);
+    throw failure;
+  }
+
+  Future<int> delete(String id) async {
+    final rows = await runStorageWrite('activity delete', () {
+      return _database.delete('activities', where: 'id = ?', whereArgs: [id]);
+    });
     _cache.remove(id);
     if (rows > 0) {
       _notifyActivitiesChanged();
@@ -185,8 +257,31 @@ class ActivityLocalRepository {
 
     return rows;
   }
-  
-   void clearCache() => _cache.clear();
+
+  Future<void> clearOptionalCache() async {
+    final rows = await runStorageWrite('activity cache cleanup', () {
+      return _database.delete(
+        'activities',
+        where: '''
+          id NOT LIKE ?
+          AND id NOT IN (SELECT activity_id FROM joined_activities)
+          AND id NOT IN (
+            SELECT activity_id
+            FROM pending_actions
+            WHERE action_type = 'CREATE_ACTIVITY'
+          )
+        ''',
+        whereArgs: ['$localActivityIdPrefix%'],
+      );
+    });
+
+    if (rows > 0) {
+      _cache.clear();
+      _notifyActivitiesChanged();
+    }
+  }
+
+  void clearCache() => _cache.clear();
 
   Future<void> dispose() async {
     await _changesController.close();

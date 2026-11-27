@@ -13,6 +13,7 @@ import '../cache/activity_image_cache.dart';
 import 'activity_image_cache_service.dart';
 import 'storage_capacity_service.dart';
 import 'storage_cleanup_service.dart';
+import 'storage_write_error.dart';
 
 typedef CacheStoreErrorReporter =
     void Function(Object error, StackTrace stackTrace);
@@ -83,8 +84,15 @@ class CapacityAwareCacheStore extends CacheStore {
 
     try {
       await innerStore.set(response);
-    } on FileSystemException catch (error, stackTrace) {
-      _reportError(error, stackTrace);
+    } catch (error, stackTrace) {
+      _reportError(
+        StorageWriteException(
+          kind: classifyStorageFailure(error),
+          operation: 'HTTP cache write',
+          cause: error,
+        ),
+        stackTrace,
+      );
     }
   }
 

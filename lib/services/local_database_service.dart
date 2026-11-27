@@ -4,21 +4,40 @@ import '../database/app_database.dart';
 import '../repositories/activity_local_repository.dart';
 import '../repositories/user_preferences_repository.dart';
 import '../repositories/pending_actions_repository.dart';
+import '../repositories/joined_activities_repository.dart';
+import 'storage_capacity_service.dart';
 
 class LocalDatabaseService {
-  LocalDatabaseService._({required this.database, required Database connection,}) {
-    activities = ActivityLocalRepository(connection);
+  LocalDatabaseService._({
+    required this.database,
+    required Database connection,
+    required this.storageCapacity,
+  }) {
+    activities = ActivityLocalRepository(
+      connection,
+      capacityService: storageCapacity,
+    );
     preferences = UserPreferencesRepository(connection);
     pendingActions = PendingActionsRepository(connection);
+    joinedActivities = JoinedActivitiesRepository(
+      connection,
+      activities,
+      pendingActions,
+    );
   }
 
   final AppDatabase database;
+  final StorageCapacityService storageCapacity;
 
   late final ActivityLocalRepository activities;
   late final UserPreferencesRepository preferences;
   late final PendingActionsRepository pendingActions;
+  late final JoinedActivitiesRepository joinedActivities;
 
-  static Future<LocalDatabaseService> open({AppDatabase? database,}) async {
+  static Future<LocalDatabaseService> open({
+    AppDatabase? database,
+    StorageCapacityService? capacityService,
+  }) async {
     final appDatabase = database ?? AppDatabase();
 
     final connection = await appDatabase.database;
@@ -26,6 +45,7 @@ class LocalDatabaseService {
     return LocalDatabaseService._(
       database: appDatabase,
       connection: connection,
+      storageCapacity: capacityService ?? StorageCapacityService.shared,
     );
   }
 

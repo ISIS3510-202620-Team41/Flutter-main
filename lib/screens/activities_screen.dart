@@ -38,12 +38,10 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
           return StreamBuilder<List<Activity>>(
             stream: _viewModel.activitiesStream,
             builder: (context, snapshot) {
-              final source =
-                  snapshot.data ?? _viewModel.activities;
+              final source = snapshot.data ?? _viewModel.activities;
 
               // Aplicamos los filtros seleccionados por el usuario.
-              final visibleActivities =
-                  _viewModel.filterActivities(source);
+              final visibleActivities = _viewModel.filterActivities(source);
 
               return SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
@@ -51,10 +49,8 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Header(
-                      onAdd: () => Navigator.pushNamed(
-                        context,
-                        '/activity/create',
-                      ),
+                      onAdd: () =>
+                          Navigator.pushNamed(context, '/activity/create'),
                     ),
 
                     const SizedBox(height: 18),
@@ -68,6 +64,23 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                         ),
                         icon: const Icon(Icons.compare_arrows, size: 18),
                         label: const Text('Comparar actividades'),
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.myJoinedActivities,
+                        ),
+                        icon: const Icon(
+                          Icons.event_available_outlined,
+                          size: 18,
+                        ),
+                        label: const Text('Mis actividades'),
                       ),
                     ),
 
@@ -103,7 +116,7 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                       markerLabel: visibleActivities.isEmpty
                           ? 'Tú'
                           : (visibleActivities.first.locationName ??
-                              visibleActivities.first.name),
+                                visibleActivities.first.name),
                     ),
 
                     const SizedBox(height: 9),
@@ -148,15 +161,13 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                         children: ActivitiesViewModel.categories
                             .map(
                               (label) => Padding(
-                                padding:
-                                    const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.only(right: 6),
                                 child: SizedBox(
                                   width: 100,
                                   child: _CategoryPill(
                                     label: label,
                                     selected:
-                                        _viewModel.selectedCategory ==
-                                            label,
+                                        _viewModel.selectedCategory == label,
                                     onTap: () =>
                                         _viewModel.selectCategory(label),
                                   ),
@@ -173,10 +184,7 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                     TextField(
                       onChanged: _viewModel.setQuery,
                       decoration: const InputDecoration(
-                        prefixIcon: Icon(
-                          Icons.search,
-                          size: 18,
-                        ),
+                        prefixIcon: Icon(Icons.search, size: 18),
                         hintText: 'Buscar',
                         hintStyle: TextStyle(fontSize: 11),
                       ),
@@ -212,21 +220,17 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                     const SizedBox(height: 12),
 
                     // Estados de carga, error y lista de actividades.
-                    if (snapshot.hasError &&
-                        visibleActivities.isEmpty)
+                    if (snapshot.hasError && visibleActivities.isEmpty)
                       const Center(
                         child: Text(
                           'Error al actualizar las actividades.',
                           style: TextStyle(fontSize: 12),
                         ),
                       )
-                    else if (_viewModel.isLoading &&
-                        visibleActivities.isEmpty)
+                    else if (_viewModel.isLoading && visibleActivities.isEmpty)
                       const Padding(
                         padding: EdgeInsets.only(top: 30),
-                        child: Center(
-                          child: CircularProgressIndicator(),
-                        ),
+                        child: Center(child: CircularProgressIndicator()),
                       )
                     else if (_viewModel.errorMessage != null &&
                         visibleActivities.isEmpty)
@@ -235,8 +239,7 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                           Expanded(
                             child: Text(
                               _viewModel.errorMessage!,
-                              style:
-                                  const TextStyle(fontSize: 12),
+                              style: const TextStyle(fontSize: 12),
                             ),
                           ),
                           TextButton(
@@ -260,14 +263,12 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                         final activityId = activity.id;
 
                         return Padding(
-                          padding:
-                              const EdgeInsets.only(bottom: 9),
+                          padding: const EdgeInsets.only(bottom: 9),
                           child: _ActivityRow(
                             activity: activity,
                             onTap: activityId == null
                                 ? null
-                                : () => widget.onOpenDetail
-                                    ?.call(activityId),
+                                : () => widget.onOpenDetail?.call(activityId),
                           ),
                         );
                       }),
@@ -283,11 +284,7 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
 }
 
 class _CategoryPill extends StatelessWidget {
-  const _CategoryPill({
-    required this.label,
-    this.selected = false,
-    this.onTap,
-  });
+  const _CategoryPill({required this.label, this.selected = false, this.onTap});
 
   final String label;
   final bool selected;
@@ -324,10 +321,7 @@ class _CategoryPill extends StatelessWidget {
 }
 
 class _FilterChip extends StatelessWidget {
-  const _FilterChip({
-    required this.label,
-    required this.icon,
-  });
+  const _FilterChip({required this.label, required this.icon});
 
   final String label;
   final IconData icon;
@@ -336,25 +330,17 @@ class _FilterChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(right: 6),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 7,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppColors.black.withValues(alpha: 0.12),
-        ),
+        border: Border.all(color: AppColors.black.withValues(alpha: 0.12)),
       ),
       child: Row(
         children: [
           Icon(icon, size: 13),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10),
-          ),
+          Text(label, style: const TextStyle(fontSize: 10)),
         ],
       ),
     );
@@ -362,10 +348,7 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _ActivityRow extends StatelessWidget {
-  const _ActivityRow({
-    required this.activity,
-    this.onTap,
-  });
+  const _ActivityRow({required this.activity, this.onTap});
 
   final Activity activity;
   final VoidCallback? onTap;
@@ -458,10 +441,7 @@ class _ActivityRow extends StatelessWidget {
                 minimumSize: const Size(52, 30),
                 padding: EdgeInsets.zero,
               ),
-              child: const Text(
-                'Ver →',
-                style: TextStyle(fontSize: 10),
-              ),
+              child: const Text('Ver →', style: TextStyle(fontSize: 10)),
             ),
           ],
         ),

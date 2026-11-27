@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llamalla/models/storage_capacity.dart';
 import 'package:llamalla/services/storage_capacity_service.dart';
 import 'package:llamalla/services/storage_cleanup_service.dart';
+import 'package:llamalla/services/storage_write_error.dart';
 
 void main() {
   test('runs cleanup steps in order until the estimated write fits', () async {
@@ -55,6 +56,7 @@ void main() {
     () async {
       var availableBytes = 5;
       final reportedSteps = <String>[];
+      final reportedFailures = <Object>[];
       final service = StorageCleanupService(
         capacityService: StorageCapacityService(
           readAvailableBytes: () async => availableBytes,
@@ -68,18 +70,31 @@ void main() {
           ),
           StorageCleanupStep(
             name: 'local images',
+            cleanup: () async => throw StateError('unexpected cleanup failure'),
+          ),
+          StorageCleanupStep(
+            name: 'later cache',
             cleanup: () async {
               availableBytes = 10;
             },
           ),
         ],
-        reportError: (name, _, _) => reportedSteps.add(name),
+        reportError: (name, error, _) {
+          reportedSteps.add(name);
+          reportedFailures.add(error);
+        },
       );
 
       final result = await service.makeRoomForOptionalWrite();
 
       expect(result.status, StorageCapacityStatus.sufficient);
-      expect(reportedSteps, ['managed images']);
+      expect(reportedSteps, ['managed images', 'local images']);
+      expect(
+        reportedFailures.map(
+          (failure) => (failure as StorageWriteException).kind,
+        ),
+        [StorageFailureKind.fileSystem, StorageFailureKind.unexpected],
+      );
     },
   );
 
@@ -92,6 +107,7 @@ void main() {
           readAvailableBytes: () async {
             throw PlatformException(code: 'storage_unavailable');
           },
+          reportError: (_, _) {},
         ),
         steps: [
           StorageCleanupStep(

@@ -6,6 +6,7 @@ import 'package:llamalla/database/app_database.dart';
 import 'package:llamalla/repositories/activity_local_repository.dart';
 import 'package:llamalla/services/activity_service.dart';
 import 'package:llamalla/services/auth_service.dart';
+import 'package:llamalla/services/storage_capacity_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _PaginatedNearbyAuthService extends AuthService {
@@ -62,7 +63,14 @@ void main() {
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
     );
-    localRepository = ActivityLocalRepository(await appDatabase.database);
+    localRepository = ActivityLocalRepository(
+      await appDatabase.database,
+      capacityService: StorageCapacityService(
+        readAvailableBytes: () async => 1 << 40,
+        minimumFreeBytes: 0,
+        safetyMarginBytes: 0,
+      ),
+    );
     authService = _PaginatedNearbyAuthService();
   });
 

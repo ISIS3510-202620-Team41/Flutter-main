@@ -1,11 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import '../models/storage_capacity.dart';
 import 'storage_capacity_service.dart';
+import 'storage_write_error.dart';
 
 typedef StorageCleanupErrorReporter =
     void Function(String stepName, Object error, StackTrace stackTrace);
@@ -43,14 +40,15 @@ class StorageCleanupService {
     for (final step in _steps) {
       try {
         await step.cleanup();
-      } on FileSystemException catch (error, stackTrace) {
-        _reportError(step.name, error, stackTrace);
-      } on DatabaseException catch (error, stackTrace) {
-        _reportError(step.name, error, stackTrace);
-      } on PlatformException catch (error, stackTrace) {
-        _reportError(step.name, error, stackTrace);
-      } on MissingPluginException catch (error, stackTrace) {
-        _reportError(step.name, error, stackTrace);
+      } catch (error, stackTrace) {
+        final failure = error is StorageWriteException
+            ? error
+            : StorageWriteException(
+                kind: classifyStorageFailure(error),
+                operation: 'cleanup step "${step.name}"',
+                cause: error,
+              );
+        _reportError(step.name, failure, stackTrace);
       }
 
       capacity = await capacityService.check(

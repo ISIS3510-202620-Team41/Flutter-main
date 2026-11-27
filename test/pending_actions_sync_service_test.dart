@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -8,11 +7,17 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:llamalla/analytics/analytics_facade.dart';
 import 'package:llamalla/analytics/analytics_feature_catalog.dart';
 import 'package:llamalla/database/app_database.dart';
+import 'package:llamalla/models/activity_record.dart';
 import 'package:llamalla/models/pending_action.dart';
+import 'package:llamalla/models/joined_activity_record.dart';
+import 'package:llamalla/repositories/activity_local_repository.dart';
+import 'package:llamalla/repositories/joined_activities_repository.dart';
 import 'package:llamalla/repositories/pending_actions_repository.dart';
+import 'package:llamalla/services/activity_service.dart';
 import 'package:llamalla/services/auth_service.dart';
 import 'package:llamalla/services/connectivity_service.dart';
 import 'package:llamalla/services/pending_actions_sync_service.dart';
+import 'package:llamalla/services/storage_capacity_service.dart';
 
 class _FakeConnectivityService implements ConnectivityService {
   _FakeConnectivityService(this.isOnline);
@@ -20,8 +25,7 @@ class _FakeConnectivityService implements ConnectivityService {
   @override
   bool? isOnline;
 
-  final StreamController<bool> _controller =
-      StreamController<bool>.broadcast();
+  final StreamController<bool> _controller = StreamController<bool>.broadcast();
 
   @override
   Stream<bool> get onConnectivityChanged => _controller.stream;
@@ -101,11 +105,7 @@ class _RecordingAnalyticsFacade extends AnalyticsFacade {
     String? action,
     String? screen,
   }) async {
-    featureEvents.add({
-      'feature': feature,
-      'action': action,
-      'screen': screen,
-    });
+    featureEvents.add({'feature': feature, 'action': action, 'screen': screen});
   }
 }
 
@@ -118,11 +118,12 @@ PendingAction _createAction({
   },
   PendingActionStatus status = PendingActionStatus.pending,
   int attempts = 0,
+  PendingActionType type = PendingActionType.joinActivity,
 }) {
   return PendingAction(
     id: id,
     userId: 'user-1',
-    type: PendingActionType.joinActivity,
+    type: type,
     activityId: activityId,
     payload: payload,
     status: status,
@@ -138,7 +139,9 @@ void main() {
   });
 
   late AppDatabase appDatabase;
+  late ActivityLocalRepository activityRepository;
   late PendingActionsRepository repository;
+  late JoinedActivitiesRepository joinedRepository;
   late _FakeConnectivityService connectivity;
   late _TestAuthService authService;
   late _RecordingAnalyticsFacade analytics;
@@ -154,16 +157,33 @@ void main() {
 
     final database = await appDatabase.database;
 
+    activityRepository = ActivityLocalRepository(
+      database,
+      capacityService: StorageCapacityService(
+        readAvailableBytes: () async => 1 << 40,
+        minimumFreeBytes: 0,
+        safetyMarginBytes: 0,
+      ),
+    );
     repository = PendingActionsRepository(database);
-
     connectivity = _FakeConnectivityService(true);
     authService = _TestAuthService();
     analytics = _RecordingAnalyticsFacade();
+    joinedRepository = JoinedActivitiesRepository(
+      database,
+      activityRepository,
+      repository,
+      activityService: ActivityService(
+        authService: authService,
+        localRepository: activityRepository,
+      ),
+    );
 
     syncService = PendingActionsSyncService(
       connectivityService: connectivity,
       repository: repository,
       authService: authService,
+      joinedActivitiesRepository: joinedRepository,
       analyticsFacade: analytics,
     );
 
@@ -172,6 +192,7 @@ void main() {
 
   tearDown(() async {
     await connectivity.dispose();
+    await activityRepository.dispose();
     await appDatabase.close();
     authSession.setUnauthenticated();
   });
@@ -183,11 +204,9 @@ void main() {
 
     final syncedIds = <String>[];
 
-    final subscription = syncService.onActionSynced.listen(
-      (syncedAction) {
-        syncedIds.add(syncedAction.id);
-      },
-    );
+    final subscription = syncService.onActionSynced.listen((syncedAction) {
+      syncedIds.add(syncedAction.id);
+    });
 
     await syncService.syncPendingActions();
 
@@ -201,19 +220,14 @@ void main() {
     expect(authService.requestedMethods, ['POST']);
     expect(authService.requestedPaths, hasLength(1));
 
-    final requestUri = Uri.parse(
-      authService.requestedPaths.single,
-    );
+    final requestUri = Uri.parse(authService.requestedPaths.single);
 
     expect(requestUri.path, '/activities/activity-1/join');
 
-    expect(
-      requestUri.queryParameters,
-      {
-        'recommendationId': 'recommendation-1',
-        'freeTimeMinutes': '45',
-      },
-    );
+    expect(requestUri.queryParameters, {
+      'recommendationId': 'recommendation-1',
+      'freeTimeMinutes': '45',
+    });
 
     expect(analytics.featureEvents, [
       {
@@ -226,8 +240,74 @@ void main() {
     await subscription.cancel();
   });
 
-  test('keeps an action pending when the backend returns HTTP 503',
-      () async {
+  test(
+    'treats a backend conflict on retrying a join as already joined',
+    () async {
+      final action = _createAction();
+      await repository.enqueue(action);
+      authService.response = http.Response(
+        '{"message":"Ya estas inscrito"}',
+        409,
+      );
+
+      await syncService.syncPendingActions();
+
+      expect(await repository.getById(action.id), isNull);
+      expect(authService.requestedMethods, ['POST']);
+    },
+  );
+
+  test('syncs a pending leave and removes the local enrollment', () async {
+    final now = DateTime.utc(2026, 11, 20);
+    final activity = ActivityRecord(
+      id: 'activity-1',
+      title: 'Actividad',
+      category: 'CULTURA',
+      startTime: '2026-12-01T10:00:00Z',
+      endTime: '2026-12-01T12:00:00Z',
+      locationName: 'Campus',
+      latitude: 4.6,
+      longitude: -74,
+      participants: 2,
+      cachedAt: now,
+    );
+    await activityRepository.upsertAll([activity]);
+    await joinedRepository.reconcileFromBackend(
+      userId: 'user-1',
+      remote: [
+        JoinedActivityRecord(
+          activity: activity,
+          userId: 'user-1',
+          enrollmentStatus: JoinedEnrollmentStatus.confirmed,
+          syncStatus: JoinedSyncStatus.synced,
+          enrollmentId: 'enrollment-1',
+          joinedAt: now,
+          createdAt: now,
+          updatedAt: now,
+          syncedAt: now,
+        ),
+      ],
+    );
+    final leave = _createAction(
+      id: 'leave-1',
+      type: PendingActionType.leaveActivity,
+      payload: const {},
+    );
+    await joinedRepository.enqueueLeave(leave);
+    authService.response = http.Response(
+      '{"message":"No estas inscrito"}',
+      404,
+    );
+
+    await syncService.syncPendingActions();
+
+    expect(authService.requestedMethods, ['DELETE']);
+    expect(authService.requestedPaths, ['/activities/activity-1/leave']);
+    expect(await joinedRepository.getForUser('user-1'), isEmpty);
+    expect(await repository.getById('leave-1'), isNull);
+  });
+
+  test('keeps an action pending when the backend returns HTTP 503', () async {
     final action = _createAction();
 
     await repository.enqueue(action);
@@ -247,24 +327,25 @@ void main() {
     expect(result.lastError, 'Service unavailable');
   });
 
-  test('keeps an action pending when the request fails due to network loss',
-      () async {
-    final action = _createAction();
+  test(
+    'keeps an action pending when the request fails due to network loss',
+    () async {
+      final action = _createAction();
 
-    await repository.enqueue(action);
+      await repository.enqueue(action);
 
-    authService.requestError =
-        http.ClientException('Connection refused');
+      authService.requestError = http.ClientException('Connection refused');
 
-    await syncService.syncPendingActions();
+      await syncService.syncPendingActions();
 
-    final result = await repository.getById(action.id);
+      final result = await repository.getById(action.id);
 
-    expect(result, isNotNull);
-    expect(result!.status, PendingActionStatus.pending);
-    expect(result.attempts, 1);
-    expect(result.lastError, contains('Connection refused'));
-  });
+      expect(result, isNotNull);
+      expect(result!.status, PendingActionStatus.pending);
+      expect(result.attempts, 1);
+      expect(result.lastError, contains('Connection refused'));
+    },
+  );
 
   test('keeps an action pending when the request times out', () async {
     final action = _createAction();
@@ -283,8 +364,7 @@ void main() {
     expect(result.lastError, contains('Request timed out'));
   });
 
-  test('marks an action as failed when the backend returns HTTP 404',
-      () async {
+  test('marks an action as failed when the backend returns HTTP 404', () async {
     final action = _createAction();
 
     await repository.enqueue(action);
@@ -318,10 +398,7 @@ void main() {
     expect(result, isNotNull);
     expect(result!.status, PendingActionStatus.pending);
     expect(result.attempts, 1);
-    expect(
-      result.lastError,
-      contains('Tu sesión expiró'),
-    );
+    expect(result.lastError, contains('Tu sesión expiró'));
   });
 
   test('does not synchronize while there is no connectivity', () async {
@@ -358,26 +435,28 @@ void main() {
     expect(authService.requestedPaths, isEmpty);
   });
 
-  test('does not process the same action twice during concurrent sync calls',
-      () async {
-    final action = _createAction();
+  test(
+    'does not process the same action twice during concurrent sync calls',
+    () async {
+      final action = _createAction();
 
-    await repository.enqueue(action);
+      await repository.enqueue(action);
 
-    final gate = Completer<void>();
-    authService.userIdGate = gate;
+      final gate = Completer<void>();
+      authService.userIdGate = gate;
 
-    final firstSync = syncService.syncPendingActions();
-    final secondSync = syncService.syncPendingActions();
+      final firstSync = syncService.syncPendingActions();
+      final secondSync = syncService.syncPendingActions();
 
-    gate.complete();
+      gate.complete();
 
-    await Future.wait([firstSync, secondSync]);
+      await Future.wait([firstSync, secondSync]);
 
-    final result = await repository.getById(action.id);
+      final result = await repository.getById(action.id);
 
-    expect(result, isNull);
-    expect(authService.userIdCalls, 1);
-    expect(authService.requestedPaths, hasLength(1));
-  });
+      expect(result, isNull);
+      expect(authService.userIdCalls, 1);
+      expect(authService.requestedPaths, hasLength(1));
+    },
+  );
 }

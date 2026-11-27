@@ -2,9 +2,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llamalla/models/storage_capacity.dart';
 import 'package:llamalla/services/storage_capacity_service.dart';
+import 'package:llamalla/services/storage_write_error.dart';
 
 void main() {
   group('StorageCapacityService', () {
+    test('default constructors use the shared capacity coordinator', () {
+      expect(
+        identical(StorageCapacityService(), StorageCapacityService.shared),
+        isTrue,
+      );
+    });
+
     test(
       'allows optional writes when capacity meets the configured reserve',
       () async {
@@ -47,6 +55,7 @@ void main() {
               message: 'Cannot read available storage',
             );
           },
+          reportError: (_, _) {},
           minimumFreeBytes: 100,
           safetyMarginBytes: 20,
         );
@@ -59,6 +68,47 @@ void main() {
         expect(result.errorMessage, contains('Cannot read available storage'));
       },
     );
+
+    test(
+      'reports a negative provider value as an observable failure',
+      () async {
+        final reportedErrors = <Object>[];
+        final service = StorageCapacityService(
+          readAvailableBytes: () async => -1,
+          reportError: (error, _) => reportedErrors.add(error),
+        );
+
+        final result = await service.check();
+
+        expect(result.status, StorageCapacityStatus.unavailable);
+        expect(result.failureKind, StorageFailureKind.provider);
+        expect(reportedErrors, hasLength(1));
+        expect(reportedErrors.single, isA<StorageWriteException>());
+        expect(
+          (reportedErrors.single as StorageWriteException).kind,
+          StorageFailureKind.provider,
+        );
+      },
+    );
+
+    test('classifies unexpected reader errors as provider failures', () async {
+      final reportedErrors = <Object>[];
+      final service = StorageCapacityService(
+        readAvailableBytes: () async => throw StateError('reader failed'),
+        reportError: (error, _) => reportedErrors.add(error),
+      );
+
+      final result = await service.check();
+
+      expect(result.status, StorageCapacityStatus.unavailable);
+      expect(result.failureKind, StorageFailureKind.provider);
+      expect(reportedErrors, hasLength(1));
+      expect(reportedErrors.single, isA<StorageWriteException>());
+      expect(
+        (reportedErrors.single as StorageWriteException).kind,
+        StorageFailureKind.provider,
+      );
+    });
 
     test('rejects negative estimated write sizes', () async {
       final service = StorageCapacityService(
