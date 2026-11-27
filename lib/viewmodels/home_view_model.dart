@@ -149,6 +149,7 @@ class HomeViewModel extends ChangeNotifier {
 
   Future<void> _loadRecommendations() async {
     recommendationsError = null;
+    var recommendationsUsageTracked = false;
 
     // Mostramos las actividades almacenadas en cache mientras obtenemos la ubicación y consultamos el backend.
     try {
@@ -160,6 +161,11 @@ class HomeViewModel extends ChangeNotifier {
       isLoadingRecommendations = recommendations.isEmpty;
       notifyListeners();
     } catch (_) {}
+
+    if (recommendations.isNotEmpty) {
+      await _trackRecommendationsUsed();
+      recommendationsUsageTracked = true;
+    }
 
     try {
       // obtenemos la ubicación del usuario
@@ -201,6 +207,10 @@ class HomeViewModel extends ChangeNotifier {
       recommendationId = batch.recommendationId;
       recommendationFreeMinutes = batch.freeMinutes;
 
+      if (!recommendationsUsageTracked) {
+        await _trackRecommendationsUsed();
+      }
+
       // BQ10: tiempo de carga de la pantalla de recomendaciones
       unawaited(
         _analyticsFacade.trackAppLoadingTime(
@@ -223,6 +233,16 @@ class HomeViewModel extends ChangeNotifier {
       isLoadingRecommendations = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _trackRecommendationsUsed() async {
+    try {
+      await _analyticsFacade.trackFeatureUsed(
+        feature: AnalyticsFeatureCatalog.activityRecommendations,
+        action: AnalyticsFeatureCatalog.loadRecommendationsAction,
+        screen: AnalyticsFeatureCatalog.activityRecommendationsScreen,
+      );
+    } catch (_) {}
   }
 
   Future<bool> choose(Activity activity) async {

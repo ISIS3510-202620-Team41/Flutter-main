@@ -285,7 +285,13 @@ void main() {
 
     await viewModel.load();
 
-    expect(analytics.featureEvents, isEmpty);
+    expect(analytics.featureEvents, [
+      {
+        'feature': 'activity_recommendations',
+        'action': 'load_recommendations',
+        'screen': 'Home',
+      },
+    ]);
     expect(viewModel.recommendations, hasLength(1));
 
     expect(
@@ -301,6 +307,11 @@ void main() {
     expect(activityService.joinedFreeMinutes, 45);
 
     expect(analytics.featureEvents, [
+      {
+        'feature': 'activity_recommendations',
+        'action': 'load_recommendations',
+        'screen': 'Home',
+      },
       {
         'feature': 'activity_recommendations',
         'action': 'select_recommendation',
@@ -357,10 +368,10 @@ void main() {
 
     expect(result, isFalse);
 
-    expect(
-      analytics.featureEvents.map((event) => event['feature']),
-      ['activity_recommendations'],
-    );
+    expect(analytics.featureEvents.map((event) => event['action']), [
+      'load_recommendations',
+      'select_recommendation',
+    ]);
 
     expect(await repository.getPending('user-1'), isEmpty);
 
@@ -398,7 +409,9 @@ void main() {
       isFalse,
     );
 
-    expect(analytics.featureEvents, isEmpty);
+    expect(analytics.featureEvents.map((event) => event['action']), [
+      'load_recommendations',
+    ]);
     expect(activityService.joinedId, isNull);
     expect(await repository.getPending('user-1'), isEmpty);
 

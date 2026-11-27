@@ -16,6 +16,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class _FakeService extends ActivityService {
   final created = <Map<String, dynamic>>[];
   final requests = <Map<String, dynamic>>[];
+  final sources = <String?>[];
   Object? error;
 
   @override
@@ -23,6 +24,7 @@ class _FakeService extends ActivityService {
     Map<String, dynamic> body, {
     String? source,
   }) async {
+    sources.add(source);
     requests.add(Map<String, dynamic>.from(body));
     if (error != null) throw error!;
     created.add(body);
@@ -113,7 +115,10 @@ void main() {
   test(
     'offline creation saves the activity and queues CREATE_ACTIVITY',
     () async {
-      final result = await repository.create(draft);
+      final result = await repository.create(
+        draft,
+        source: 'friend_availability',
+      );
 
       expect(result.savedOffline, isTrue);
       expect(result.activity.isPendingSync, isTrue);
@@ -132,6 +137,7 @@ void main() {
         queue.first.payload['_planCreationContext'],
         draft.planCreationContext!.toMap(),
       );
+      expect(queue.first.payload['_creationSource'], 'friend_availability');
       expect(analytics.attempts, hasLength(1));
       expect(
         analytics.attempts.single.attemptId,
@@ -147,7 +153,7 @@ void main() {
   test(
     'syncPending reuses attemptId and does not republish the attempt',
     () async {
-      await repository.create(draft);
+      await repository.create(draft, source: 'friend_availability');
       online = true;
 
       final synced = await repository.syncPending();
@@ -162,6 +168,8 @@ void main() {
         service.created.single.containsKey('_planCreationContext'),
         isFalse,
       );
+      expect(service.created.single.containsKey('_creationSource'), isFalse);
+      expect(service.sources, ['friend_availability']);
       expect(analytics.attempts, hasLength(1));
       expect(await activities.getById('local-client-1'), isNull);
       expect(await pending.getPending('user-1'), isEmpty);

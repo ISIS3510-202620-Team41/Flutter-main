@@ -26,6 +26,8 @@ class CreateResult {
 
 // Crea actividades online o las guarda localmente
 class ActivityRepository {
+  static const _creationSourceKey = '_creationSource';
+
   ActivityRepository({
     ActivityService? service,
     ActivityLocalRepository? localRepository,
@@ -83,13 +85,19 @@ class ActivityRepository {
         if (!_isNetworkError(error)) rethrow;
       }
     }
-    return _saveOffline(draft, requestBody: requestBody, context: context);
+    return _saveOffline(
+      draft,
+      requestBody: requestBody,
+      context: context,
+      source: source,
+    );
   }
 
   Future<CreateResult> _saveOffline(
     ActivityDraft draft, {
     required Map<String, dynamic> requestBody,
     required PlanCreationContext context,
+    String? source,
   }) async {
     final local = _local;
     final pending = _pending;
@@ -105,6 +113,14 @@ class ActivityRepository {
     await local.insert(record);
 
     final now = DateTime.now().toUtc();
+    final payload = {
+      ...requestBody,
+      '_planCreationContext': context.toMap(),
+    };
+    if (source != null) {
+      payload[_creationSourceKey] = source;
+    }
+
     try {
       await pending.enqueue(
         PendingAction(
@@ -112,7 +128,7 @@ class ActivityRepository {
           userId: userId,
           type: PendingActionType.createActivity,
           activityId: localId,
-          payload: {...requestBody, '_planCreationContext': context.toMap()},
+          payload: payload,
           status: PendingActionStatus.pending,
           attempts: 0,
           createdAt: now,
@@ -159,8 +175,9 @@ class ActivityRepository {
         try {
           final requestBody = Map<String, dynamic>.from(action.payload)
             ..remove('_planCreationContext');
+          final source = requestBody.remove(_creationSourceKey) as String?;
           final created = await _service
-              .createActivity(requestBody)
+              .createActivity(requestBody, source: source)
               .timeout(_timeout);
           await _joinCreator(created.id);
           await local.delete(action.activityId);
