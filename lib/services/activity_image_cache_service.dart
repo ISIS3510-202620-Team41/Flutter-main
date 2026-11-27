@@ -1,38 +1,50 @@
-
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'storage_capacity_service.dart';
+
+typedef ImageResponseLoader = Future<http.Response> Function(Uri uri);
+typedef ImageDirectoryProvider = Future<Directory> Function();
+typedef ImageCacheErrorReporter =
+    void Function(Object error, StackTrace stackTrace);
+
 class ActivityImageCacheService {
+  ActivityImageCacheService({
+    StorageCapacityService? capacityService,
+    ImageResponseLoader? loadImage,
+    ImageDirectoryProvider? getSupportDirectory,
+    ImageCacheErrorReporter? reportError,
+  }) : _capacityService = capacityService ?? StorageCapacityService(),
+       _loadImage = loadImage ?? _loadRemoteImage,
+       _getSupportDirectory =
+           getSupportDirectory ?? getApplicationSupportDirectory,
+       _reportError = reportError ?? _reportCacheError;
+
+  final StorageCapacityService _capacityService;
+  final ImageResponseLoader _loadImage;
+  final ImageDirectoryProvider _getSupportDirectory;
+  final ImageCacheErrorReporter _reportError;
 
   Future<String?> downloadAndCache({
     required String activityId,
     required String imageUrl,
   }) async {
+    final uri = Uri.tryParse(imageUrl);
+
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return null;
+    }
+
+    Directory? temporaryDirectory;
     try {
-      final uri = Uri.tryParse(imageUrl);
+      final response = await _loadImage(uri);
 
-      if (uri == null ||
-          (uri.scheme != 'http' && uri.scheme != 'https')) {
-        return null;
-      }
-
-      final directory = await getApplicationSupportDirectory();
-
-      final imageDirectory = Directory(
-        p.join(directory.path, 'activity_images'),
-      );
-
-      await imageDirectory.create(recursive: true);
-
-      final response = await http.get(uri).timeout(
-        const Duration(seconds: 20),
-      );
-
-      if (response.statusCode != 200 ||
-          response.bodyBytes.isEmpty) {
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
         return null;
       }
 
@@ -42,37 +54,78 @@ class ActivityImageCacheService {
         return null;
       }
 
-      final safeId = activityId.replaceAll(
-        RegExp(r'[^a-zA-Z0-9_-]'),
-        '_',
+      final capacity = await _capacityService.check(
+        estimatedWriteBytes: response.bodyBytes.length,
       );
+      if (!capacity.canWriteOptionalData) {
+        if (!capacity.hasCapacityInformation) {
+          _reportError(
+            StateError(
+              capacity.errorMessage ?? 'Unable to check storage capacity.',
+            ),
+            StackTrace.current,
+          );
+        }
+        return null;
+      }
+
+      final directory = await _getSupportDirectory();
+      final imageDirectory = Directory(
+        p.join(directory.path, 'activity_images'),
+      );
+      await imageDirectory.create(recursive: true);
+
+      final safeId = activityId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
 
       final extension = contentType.contains('png')
           ? '.png'
           : contentType.contains('webp')
-              ? '.webp'
-              : contentType.contains('gif')
-                  ? '.gif'
-                  : '.jpg';
+          ? '.webp'
+          : contentType.contains('gif')
+          ? '.gif'
+          : '.jpg';
 
-      final file = File(
-        p.join(imageDirectory.path, '$safeId$extension'),
-      );
+      final downloadDirectory = await imageDirectory.createTemp('.image-');
+      temporaryDirectory = downloadDirectory;
+      final temporaryFile = File(p.join(downloadDirectory.path, 'download'));
+      await temporaryFile.writeAsBytes(response.bodyBytes, flush: true);
 
-      await file.writeAsBytes(
-        response.bodyBytes,
-        flush: true,
-      );
-
-      final exists = await file.exists();
-      final length = exists ? await file.length() : 0;
-
-      if (!exists || length == 0) {
-        return null;
+      if (await temporaryFile.length() != response.bodyBytes.length) {
+        throw FileSystemException(
+          'Cached image size did not match the downloaded image.',
+          temporaryFile.path,
+        );
       }
 
+      final file = File(p.join(imageDirectory.path, '$safeId$extension'));
+
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      await temporaryFile.rename(file.path);
+      temporaryDirectory = null;
+      try {
+        await downloadDirectory.delete();
+      } on FileSystemException catch (error, stackTrace) {
+        _reportError(error, stackTrace);
+      }
       return file.path;
-    } catch (_) {
+    } on SocketException catch (error, stackTrace) {
+      _reportError(error, stackTrace);
+      await _cleanupTemporaryDirectory(temporaryDirectory);
+      return null;
+    } on TimeoutException catch (error, stackTrace) {
+      _reportError(error, stackTrace);
+      await _cleanupTemporaryDirectory(temporaryDirectory);
+      return null;
+    } on http.ClientException catch (error, stackTrace) {
+      _reportError(error, stackTrace);
+      await _cleanupTemporaryDirectory(temporaryDirectory);
+      return null;
+    } on FileSystemException catch (error, stackTrace) {
+      _reportError(error, stackTrace);
+      await _cleanupTemporaryDirectory(temporaryDirectory);
       return null;
     }
   }
@@ -83,8 +136,35 @@ class ActivityImageCacheService {
     try {
       final file = File(path);
       return await file.exists() && await file.length() > 0;
-    } catch (_) {
+    } on FileSystemException catch (error, stackTrace) {
+      _reportError(error, stackTrace);
       return false;
     }
+  }
+
+  Future<void> _cleanupTemporaryDirectory(Directory? directory) async {
+    if (directory == null) return;
+
+    try {
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    } on FileSystemException catch (error, stackTrace) {
+      _reportError(error, stackTrace);
+    }
+  }
+
+  static Future<http.Response> _loadRemoteImage(Uri uri) {
+    return http.get(uri).timeout(const Duration(seconds: 20));
+  }
+
+  static void _reportCacheError(Object error, StackTrace stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'activity image cache',
+      ),
+    );
   }
 }

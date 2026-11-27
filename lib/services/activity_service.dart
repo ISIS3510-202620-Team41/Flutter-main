@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:llamalla/repositories/activity_local_repository.dart';
+import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import '../database/local_database_facade.dart';
 import '../utils/distance_calculator.dart';
@@ -35,16 +37,17 @@ class ActivityService {
   ActivityService({
     AuthService? authService,
     ActivityLocalRepository? localRepository,
-    }): _authService = authService ?? AuthService(),
-        _injectedLocalRepository = localRepository;
+    ActivityImageCacheService? imageCache,
+  }) : _authService = authService ?? AuthService(),
+       _injectedLocalRepository = localRepository,
+       _imageCache = imageCache ?? ActivityImageCacheService();
 
   final AuthService _authService;
   final ActivityLocalRepository? _injectedLocalRepository;
-  final ActivityImageCacheService _imageCache = ActivityImageCacheService();
-  
-  ActivityLocalRepository? get _localRepository =>
-    _injectedLocalRepository ?? LocalDatabaseFacade.instance.activities;
+  final ActivityImageCacheService _imageCache;
 
+  ActivityLocalRepository? get _localRepository =>
+      _injectedLocalRepository ?? LocalDatabaseFacade.instance.activities;
 
   Future<RecommendationBatch> getRecommendations({
     required double lat,
@@ -219,6 +222,7 @@ class ActivityService {
     final records = await repository.getPendingSync();
     return records.map((record) => record.toActivity()).toList(growable: false);
   }
+
   Future<Activity> createActivity(
       Map<String, dynamic> body, {
         String? source,
@@ -379,7 +383,14 @@ class ActivityService {
       }
 
       await repository.upsertAll(updatedRecords);
-    } catch (_) { 
+    } on DatabaseException catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'activity persistence cache',
+        ),
+      );
     }
   }
 
