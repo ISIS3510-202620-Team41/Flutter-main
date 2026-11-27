@@ -10,6 +10,7 @@ import 'navigation/app_routes.dart';
 
 import 'screens/dashboard_screen.dart';
 import 'screens/activity_detail_screen.dart';
+import 'screens/activity_comparison_screen.dart';
 import 'screens/activity_created_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -194,6 +195,7 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                 AppRoutes.createActivity,
                 AppRoutes.activityCreated,
                 AppRoutes.activityDetail,
+                AppRoutes.activityComparison,
               };
               if (protectedRoutes.contains(settings.name) &&
                   authSession.isAuthenticated != true) {
@@ -244,6 +246,11 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                           ? activityId
                           : null,
                     ),
+                  );
+                case AppRoutes.activityComparison:
+                  return MaterialPageRoute<void>(
+                    settings: settings,
+                    builder: (_) => const ActivityComparisonScreen(),
                   );
                 default:
                   return null;
