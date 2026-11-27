@@ -4,6 +4,7 @@ import '../models/activity_record.dart';
 import '../models/joined_activity_record.dart';
 import '../models/pending_action.dart';
 import '../services/activity_service.dart';
+import '../services/storage_write_error.dart';
 import 'activity_local_repository.dart';
 import 'pending_actions_repository.dart';
 
@@ -68,7 +69,10 @@ class JoinedActivitiesRepository {
         enrollment.activity.copyWith(localImagePath: previous?.localImagePath),
       );
     }
-    await _activityRepository.upsertAll(records);
+    await _activityRepository.upsertAll(
+      records,
+      policy: ActivityWritePolicy.essential,
+    );
     await reconcileFromBackend(userId: userId, remote: remote);
   }
 
@@ -85,7 +89,9 @@ class JoinedActivitiesRepository {
     final now = _now().toUtc();
     final remoteById = {for (final item in remote) item.activity.id: item};
 
-    await _database.transaction((transaction) async {
+    await _writeTransaction('joined activity reconciliation', (
+      transaction,
+    ) async {
       final existingRows = await transaction.query(
         'joined_activities',
         where: 'user_id = ?',
@@ -181,7 +187,9 @@ class JoinedActivitiesRepository {
     required String activityId,
   }) async {
     final now = _now().toUtc();
-    await _database.transaction((transaction) async {
+    await _writeTransaction('confirmed activity join persistence', (
+      transaction,
+    ) async {
       final actions = await _readActions(
         transaction,
         userId: userId,
@@ -244,7 +252,9 @@ class JoinedActivitiesRepository {
   Future<void> enqueueJoin(PendingAction action) async {
     _requireType(action, PendingActionType.joinActivity);
     final now = _now().toUtc();
-    await _database.transaction((transaction) async {
+    await _writeTransaction('pending activity join persistence', (
+      transaction,
+    ) async {
       final actions = await _readActions(
         transaction,
         userId: action.userId,
@@ -306,7 +316,9 @@ class JoinedActivitiesRepository {
   Future<void> enqueueLeave(PendingAction action) async {
     _requireType(action, PendingActionType.leaveActivity);
     final now = _now().toUtc();
-    await _database.transaction((transaction) async {
+    await _writeTransaction('pending activity leave persistence', (
+      transaction,
+    ) async {
       final actions = await _readActions(
         transaction,
         userId: action.userId,
@@ -406,7 +418,9 @@ class JoinedActivitiesRepository {
     int? attempts,
   }) async {
     final now = _now().toUtc();
-    await _database.transaction((transaction) async {
+    await _writeTransaction('pending activity status persistence', (
+      transaction,
+    ) async {
       await _pendingActionsRepository.updateStatusInTransaction(
         transaction,
         id: action.id,
@@ -434,7 +448,9 @@ class JoinedActivitiesRepository {
 
   Future<void> completeAction(PendingAction action) async {
     final now = _now().toUtc();
-    await _database.transaction((transaction) async {
+    await _writeTransaction('activity action completion persistence', (
+      transaction,
+    ) async {
       await _pendingActionsRepository.deleteInTransaction(
         transaction,
         action.id,
@@ -492,7 +508,9 @@ class JoinedActivitiesRepository {
     required String activityId,
   }) async {
     final now = _now().toUtc();
-    return _database.transaction((transaction) async {
+    return _writeTransaction('failed activity action retry', (
+      transaction,
+    ) async {
       final actions = await _readActions(
         transaction,
         userId: userId,
@@ -534,7 +552,9 @@ class JoinedActivitiesRepository {
     required String userId,
     required String activityId,
   }) async {
-    await _database.transaction((transaction) async {
+    await _writeTransaction('confirmed activity leave persistence', (
+      transaction,
+    ) async {
       final actions = await _readActions(
         transaction,
         userId: userId,
@@ -689,6 +709,13 @@ class JoinedActivitiesRepository {
       'synced_at': syncedAt,
       'last_error': lastError,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<T> _writeTransaction<T>(
+    String operation,
+    Future<T> Function(Transaction transaction) action,
+  ) {
+    return runStorageWrite(operation, () => _database.transaction(action));
   }
 
   JoinedSyncStatus _syncStatusFor(PendingActionStatus status) {

@@ -3,6 +3,7 @@ import '../repositories/activity_local_repository.dart';
 import '../repositories/user_preferences_repository.dart';
 import '../repositories/pending_actions_repository.dart';
 import '../repositories/joined_activities_repository.dart';
+import '../services/storage_capacity_service.dart';
 
 class LocalDatabaseFacade {
   LocalDatabaseFacade._();
@@ -12,12 +13,16 @@ class LocalDatabaseFacade {
   LocalDatabaseService? _databaseService;
   Future<void>? _initialization;
 
+  StorageCapacityService get storageCapacity => StorageCapacityService.shared;
+
   Future<void> initialize() {
     return _initialization ??= _initializeDatabase();
   }
 
   Future<void> _initializeDatabase() async {
-    _databaseService = await LocalDatabaseService.open();
+    _databaseService = await LocalDatabaseService.open(
+      capacityService: storageCapacity,
+    );
   }
 
   ActivityLocalRepository? get activities => _databaseService?.activities;

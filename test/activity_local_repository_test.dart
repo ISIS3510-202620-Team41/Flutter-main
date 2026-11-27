@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:llamalla/database/app_database.dart';
 import 'package:llamalla/models/activity_record.dart';
+import 'package:llamalla/models/storage_capacity.dart';
 import 'package:llamalla/repositories/activity_local_repository.dart';
+import 'package:llamalla/services/storage_capacity_service.dart';
+import 'package:llamalla/services/storage_write_error.dart';
 
 void main() {
   setUpAll(() {
@@ -21,7 +25,14 @@ void main() {
     );
 
     final db = await appDatabase.database;
-    repository = ActivityLocalRepository(db);
+    repository = ActivityLocalRepository(
+      db,
+      capacityService: StorageCapacityService(
+        readAvailableBytes: () async => 1 << 40,
+        minimumFreeBytes: 0,
+        safetyMarginBytes: 0,
+      ),
+    );
   });
 
   tearDown(() async {
@@ -107,20 +118,85 @@ void main() {
 
     expect(result.length, 2);
   });
-  test('watchAll emits initial data and updates after insert', () async {
-    final firstEmission =
-        Completer<List<ActivityRecord>>();
 
-    final secondEmission =
-        Completer<List<ActivityRecord>>();
+  test(
+    'rejects optional activity writes when capacity is insufficient',
+    () async {
+      final reportedErrors = <FlutterErrorDetails>[];
+      final previousErrorHandler = FlutterError.onError;
+      FlutterError.onError = reportedErrors.add;
+      final db = await appDatabase.database;
+      final guardedRepository = ActivityLocalRepository(
+        db,
+        capacityService: StorageCapacityService(
+          readAvailableBytes: () async => 10,
+          minimumFreeBytes: 100,
+          safetyMarginBytes: 0,
+        ),
+      );
+
+      try {
+        await expectLater(
+          guardedRepository.insert(
+            activity,
+            policy: ActivityWritePolicy.optionalCache,
+          ),
+          throwsA(isA<StorageWriteException>()),
+        );
+        await expectLater(
+          guardedRepository.upsertAll([activity]),
+          throwsA(
+            isA<StorageWriteException>().having(
+              (error) => error.kind,
+              'kind',
+              StorageFailureKind.capacity,
+            ),
+          ),
+        );
+        await expectLater(
+          guardedRepository.update(
+            activity,
+            policy: ActivityWritePolicy.optionalCache,
+          ),
+          throwsA(isA<StorageWriteException>()),
+        );
+        expect(await guardedRepository.getAll(), isEmpty);
+        expect(reportedErrors, hasLength(3));
+      } finally {
+        FlutterError.onError = previousErrorHandler;
+        await guardedRepository.dispose();
+      }
+    },
+  );
+
+  test('essential offline inserts do not depend on capacity checks', () async {
+    final guardedRepository = ActivityLocalRepository(
+      await appDatabase.database,
+      capacityService: StorageCapacityService(
+        readAvailableBytes: () async =>
+            throw StateError('provider unavailable'),
+      ),
+    );
+
+    try {
+      await guardedRepository.insert(activity);
+      expect(await guardedRepository.getById(activity.id), isNotNull);
+    } finally {
+      await guardedRepository.dispose();
+    }
+  });
+
+  test('watchAll emits initial data and updates after insert', () async {
+    final firstEmission = Completer<List<ActivityRecord>>();
+
+    final secondEmission = Completer<List<ActivityRecord>>();
 
     var emissions = 0;
 
     final subscription = repository.watchAll().listen((records) {
       if (emissions == 0 && !firstEmission.isCompleted) {
         firstEmission.complete(records);
-      } else if (emissions == 1 &&
-          !secondEmission.isCompleted) {
+      } else if (emissions == 1 && !secondEmission.isCompleted) {
         secondEmission.complete(records);
       }
 

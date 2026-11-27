@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:llamalla/repositories/activity_local_repository.dart';
-import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import '../database/local_database_facade.dart';
 import '../utils/distance_calculator.dart';
@@ -12,6 +10,7 @@ import '../models/joined_activity_record.dart';
 import 'activity_image_cache_service.dart';
 import 'auth_service.dart';
 import '../models/activity_draft.dart';
+import 'storage_write_error.dart';
 import '../utils/haversine.dart';
 
 class ActivityException implements Exception {
@@ -507,13 +506,16 @@ class ActivityService {
       }
 
       await repository.upsertAll(updatedRecords);
-    } on DatabaseException catch (error, stackTrace) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'activity persistence cache',
+    } on StorageWriteException {
+      // Activity cache persistence is optional; the failure was already reported.
+    } catch (error, stackTrace) {
+      reportStorageFailure(
+        StorageWriteException(
+          kind: classifyStorageFailure(error),
+          operation: 'activity cache persistence',
+          cause: error,
         ),
+        stackTrace,
       );
     }
   }

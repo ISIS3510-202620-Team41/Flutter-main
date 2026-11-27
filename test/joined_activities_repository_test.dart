@@ -8,6 +8,7 @@ import 'package:llamalla/models/pending_action.dart';
 import 'package:llamalla/repositories/activity_local_repository.dart';
 import 'package:llamalla/repositories/joined_activities_repository.dart';
 import 'package:llamalla/repositories/pending_actions_repository.dart';
+import 'package:llamalla/services/storage_capacity_service.dart';
 
 ActivityRecord _activity(String id) {
   return ActivityRecord(
@@ -77,7 +78,14 @@ void main() {
       databasePath: inMemoryDatabasePath,
     );
     final database = await appDatabase.database;
-    activityRepository = ActivityLocalRepository(database);
+    activityRepository = ActivityLocalRepository(
+      database,
+      capacityService: StorageCapacityService(
+        readAvailableBytes: () async => 1 << 40,
+        minimumFreeBytes: 0,
+        safetyMarginBytes: 0,
+      ),
+    );
     pendingActionsRepository = PendingActionsRepository(database);
     joinedRepository = JoinedActivitiesRepository(
       database,

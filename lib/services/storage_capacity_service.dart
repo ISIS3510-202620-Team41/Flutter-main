@@ -1,16 +1,47 @@
-import 'package:flutter/services.dart';
 import 'package:storage_space/storage_space.dart';
 
 import '../models/storage_capacity.dart';
+import 'storage_write_error.dart';
 
 typedef AvailableStorageReader = Future<int> Function();
 
 class StorageCapacityService {
-  StorageCapacityService({
+  static final shared = StorageCapacityService._shared();
+
+  factory StorageCapacityService({
     AvailableStorageReader? readAvailableBytes,
-    this.minimumFreeBytes = defaultMinimumFreeBytes,
-    this.safetyMarginBytes = defaultSafetyMarginBytes,
-  }) : _readAvailableBytes = readAvailableBytes ?? _readDeviceAvailableBytes {
+    int minimumFreeBytes = defaultMinimumFreeBytes,
+    int safetyMarginBytes = defaultSafetyMarginBytes,
+    StorageFailureReporter? reportError,
+  }) {
+    if (readAvailableBytes == null &&
+        minimumFreeBytes == defaultMinimumFreeBytes &&
+        safetyMarginBytes == defaultSafetyMarginBytes &&
+        reportError == null) {
+      return shared;
+    }
+    return StorageCapacityService._(
+      readAvailableBytes: readAvailableBytes ?? _readDeviceAvailableBytes,
+      minimumFreeBytes: minimumFreeBytes,
+      safetyMarginBytes: safetyMarginBytes,
+      reportError: reportError ?? reportStorageFailure,
+    );
+  }
+
+  StorageCapacityService._shared()
+    : this._(
+        readAvailableBytes: _readDeviceAvailableBytes,
+        minimumFreeBytes: defaultMinimumFreeBytes,
+        safetyMarginBytes: defaultSafetyMarginBytes,
+        reportError: reportStorageFailure,
+      );
+
+  StorageCapacityService._({
+    required this._readAvailableBytes,
+    required this.minimumFreeBytes,
+    required this.safetyMarginBytes,
+    required this._reportError,
+  }) {
     if (minimumFreeBytes < 0) {
       throw ArgumentError.value(minimumFreeBytes, 'minimumFreeBytes');
     }
@@ -23,6 +54,7 @@ class StorageCapacityService {
   static const int defaultSafetyMarginBytes = 20 * 1024 * 1024;
 
   final AvailableStorageReader _readAvailableBytes;
+  final StorageFailureReporter _reportError;
   final int minimumFreeBytes;
   final int safetyMarginBytes;
 
@@ -42,6 +74,7 @@ class StorageCapacityService {
           availableBytes: null,
           requiredFreeBytes: requiredFreeBytes,
           errorMessage: 'The platform returned a negative storage value.',
+          failureKind: StorageFailureKind.provider,
         );
       }
 
@@ -52,12 +85,20 @@ class StorageCapacityService {
         availableBytes: availableBytes,
         requiredFreeBytes: requiredFreeBytes,
       );
-    } on PlatformException catch (error) {
-      return _unavailable(requiredFreeBytes, error);
-    } on MissingPluginException catch (error) {
-      return _unavailable(requiredFreeBytes, error);
-    } on FormatException catch (error) {
-      return _unavailable(requiredFreeBytes, error);
+    } catch (error, stackTrace) {
+      final classified = classifyStorageFailure(error);
+      final failureKind = classified == StorageFailureKind.unexpected
+          ? StorageFailureKind.provider
+          : classified;
+      _reportError(
+        StorageWriteException(
+          kind: failureKind,
+          operation: 'capacity query',
+          cause: error,
+        ),
+        stackTrace,
+      );
+      return _unavailable(requiredFreeBytes, error, failureKind);
     }
   }
 
@@ -69,12 +110,17 @@ class StorageCapacityService {
     return storage.free;
   }
 
-  StorageCapacity _unavailable(int requiredFreeBytes, Object error) {
+  StorageCapacity _unavailable(
+    int requiredFreeBytes,
+    Object error,
+    StorageFailureKind failureKind,
+  ) {
     return StorageCapacity(
       status: StorageCapacityStatus.unavailable,
       availableBytes: null,
       requiredFreeBytes: requiredFreeBytes,
       errorMessage: error.toString(),
+      failureKind: failureKind,
     );
   }
 }

@@ -5,9 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:llamalla/database/app_database.dart';
 import 'package:llamalla/models/activity_record.dart';
+import 'package:llamalla/models/storage_capacity.dart';
 import 'package:llamalla/repositories/activity_local_repository.dart';
 import 'package:llamalla/services/activity_service.dart';
 import 'package:llamalla/services/auth_service.dart';
+import 'package:llamalla/services/storage_write_error.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _DiskFullDatabaseException extends DatabaseException {
@@ -24,7 +26,10 @@ class _FailingActivityLocalRepository extends ActivityLocalRepository {
   _FailingActivityLocalRepository(super.database);
 
   @override
-  Future<void> upsertAll(List<ActivityRecord> activities) async {
+  Future<void> upsertAll(
+    List<ActivityRecord> activities, {
+    ActivityWritePolicy policy = ActivityWritePolicy.optionalCache,
+  }) async {
     throw _DiskFullDatabaseException();
   }
 }
@@ -90,9 +95,10 @@ void main() {
 
         expect(activity.id, 'activity-1');
         expect(reportedErrors, hasLength(1));
+        expect(reportedErrors.single.exception, isA<StorageWriteException>());
         expect(
-          reportedErrors.single.exception,
-          isA<_DiskFullDatabaseException>(),
+          (reportedErrors.single.exception as StorageWriteException).kind,
+          StorageFailureKind.capacity,
         );
       } finally {
         FlutterError.onError = previousErrorHandler;

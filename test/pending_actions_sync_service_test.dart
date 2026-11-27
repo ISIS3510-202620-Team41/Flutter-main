@@ -17,6 +17,7 @@ import 'package:llamalla/services/activity_service.dart';
 import 'package:llamalla/services/auth_service.dart';
 import 'package:llamalla/services/connectivity_service.dart';
 import 'package:llamalla/services/pending_actions_sync_service.dart';
+import 'package:llamalla/services/storage_capacity_service.dart';
 
 class _FakeConnectivityService implements ConnectivityService {
   _FakeConnectivityService(this.isOnline);
@@ -156,7 +157,14 @@ void main() {
 
     final database = await appDatabase.database;
 
-    activityRepository = ActivityLocalRepository(database);
+    activityRepository = ActivityLocalRepository(
+      database,
+      capacityService: StorageCapacityService(
+        readAvailableBytes: () async => 1 << 40,
+        minimumFreeBytes: 0,
+        safetyMarginBytes: 0,
+      ),
+    );
     repository = PendingActionsRepository(database);
     connectivity = _FakeConnectivityService(true);
     authService = _TestAuthService();
