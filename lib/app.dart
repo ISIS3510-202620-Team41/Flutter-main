@@ -11,7 +11,6 @@ import 'navigation/app_routes.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/activity_detail_screen.dart';
 import 'screens/activity_comparison_screen.dart';
-import 'screens/my_joined_activities_screen.dart';
 import 'screens/activity_created_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -39,14 +38,13 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
   final _pendingActionsSyncService = PendingActionsSyncService.instance;
 
   late final AnalyticsNavigatorObserver _analyticsObserver =
-      AnalyticsNavigatorObserver(
-        initialScreenResolver: () => authSession.isAuthenticated == true
-            ? AnalyticsScreenCatalog.home
-            : AnalyticsScreenCatalog.login,
-        onScreenView: (screen) =>
-            AnalyticsFacade.instance.trackScreenView(screen: screen),
-        currentDashboardTabResolver: () =>
-            AnalyticsFacade.instance.currentDashboardTab,
+    AnalyticsNavigatorObserver(
+      initialScreenResolver: () => 
+          authSession.isAuthenticated == true
+              ? AnalyticsScreenCatalog.home
+              : AnalyticsScreenCatalog.login,
+          onScreenView: (screen) => AnalyticsFacade.instance.trackScreenView(screen: screen,),
+          currentDashboardTabResolver: () => AnalyticsFacade.instance.currentDashboardTab,
       );
 
   @override
@@ -107,7 +105,9 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
     // Si el usuario inicia o recupera sesión, intentamos sincronizar las acciones pendientes.
     if (authSession.isAuthenticated == true) {
       if (_connectivityService.isOnline == true) {
-        unawaited(_pendingActionsSyncService.syncPendingActions());
+        unawaited(
+          _pendingActionsSyncService.syncPendingActions(),
+        );
       }
 
       return;
@@ -175,9 +175,12 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
 
                   return Column(
                     children: [
-                      if (isOffline) const OfflineBanner(),
+                      if (isOffline)
+                        const OfflineBanner(),
 
-                      Expanded(child: child ?? const SizedBox.shrink()),
+                      Expanded(
+                        child: child ?? const SizedBox.shrink(),
+                      ),
                     ],
                   );
                 },
@@ -193,7 +196,6 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                 AppRoutes.activityCreated,
                 AppRoutes.activityDetail,
                 AppRoutes.activityComparison,
-                AppRoutes.myJoinedActivities,
               };
               if (protectedRoutes.contains(settings.name) &&
                   authSession.isAuthenticated != true) {
@@ -212,7 +214,7 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                   return MaterialPageRoute<void>(
                     settings: settings,
                     builder: (_) => const LoginScreen(),
-                  );
+                    );
                 case AppRoutes.register:
                   return MaterialPageRoute<void>(
                     settings: settings,
@@ -230,11 +232,9 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                   final args = settings.arguments as Map<String, dynamic>;
                   return MaterialPageRoute<void>(
                     settings: settings,
-                    builder: (_) => ActivityCreatedScreen(
-                      activity: args['activity'] as Activity,
+                    builder: (_) => ActivityCreatedScreen(activity: args['activity'] as Activity,
                       friends: args['friends'] as List<String>,
-                      savedOffline: args['savedOffline'] as bool? ?? false,
-                    ),
+                      savedOffline: args['savedOffline'] as bool? ?? false,),
                   );
                 case AppRoutes.activityDetail:
                   final activityId = settings.arguments;
@@ -242,18 +242,15 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                   return MaterialPageRoute<void>(
                     settings: settings,
                     builder: (_) => ActivityDetailScreen(
-                      activityId: activityId is String ? activityId : null,
+                      activityId: activityId is String
+                          ? activityId
+                          : null,
                     ),
                   );
                 case AppRoutes.activityComparison:
                   return MaterialPageRoute<void>(
                     settings: settings,
                     builder: (_) => const ActivityComparisonScreen(),
-                  );
-                case AppRoutes.myJoinedActivities:
-                  return MaterialPageRoute<void>(
-                    settings: settings,
-                    builder: (_) => const MyJoinedActivitiesScreen(),
                   );
                 default:
                   return null;
