@@ -69,6 +69,28 @@ void main() {
       },
     );
 
+    test(
+      'reports a negative provider value as an observable failure',
+      () async {
+        final reportedErrors = <Object>[];
+        final service = StorageCapacityService(
+          readAvailableBytes: () async => -1,
+          reportError: (error, _) => reportedErrors.add(error),
+        );
+
+        final result = await service.check();
+
+        expect(result.status, StorageCapacityStatus.unavailable);
+        expect(result.failureKind, StorageFailureKind.provider);
+        expect(reportedErrors, hasLength(1));
+        expect(reportedErrors.single, isA<StorageWriteException>());
+        expect(
+          (reportedErrors.single as StorageWriteException).kind,
+          StorageFailureKind.provider,
+        );
+      },
+    );
+
     test('classifies unexpected reader errors as provider failures', () async {
       final reportedErrors = <Object>[];
       final service = StorageCapacityService(

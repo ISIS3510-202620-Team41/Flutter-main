@@ -41,11 +41,13 @@ class StorageCleanupService {
       try {
         await step.cleanup();
       } catch (error, stackTrace) {
-        final failure = StorageWriteException(
-          kind: classifyStorageFailure(error),
-          operation: 'cleanup step "${step.name}"',
-          cause: error,
-        );
+        final failure = error is StorageWriteException
+            ? error
+            : StorageWriteException(
+                kind: classifyStorageFailure(error),
+                operation: 'cleanup step "${step.name}"',
+                cause: error,
+              );
         _reportError(step.name, failure, stackTrace);
       }
 

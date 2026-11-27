@@ -18,16 +18,24 @@ class ActivityLocalRepository {
     StorageCapacityService? capacityService,
     StorageCleanupService? cleanupService,
   }) : _cache = cache ?? ActivityMemoryCache(),
-       _cleanupService =
-           cleanupService ??
-           StorageCleanupService(
-             capacityService: capacityService ?? StorageCapacityService.shared,
-             steps: const [],
-           );
+       _capacityService = capacityService ?? StorageCapacityService.shared {
+    _cleanupService =
+        cleanupService ??
+        StorageCleanupService(
+          capacityService: _capacityService,
+          steps: [
+            StorageCleanupStep(
+              name: 'cached activities',
+              cleanup: clearOptionalCache,
+            ),
+          ],
+        );
+  }
 
   final Database _database;
   final ActivityMemoryCache _cache;
-  final StorageCleanupService _cleanupService;
+  final StorageCapacityService _capacityService;
+  late final StorageCleanupService _cleanupService;
 
   // Notifica cuando cambia la tabla de actividades de la db.
   final StreamController<void> _changesController =
@@ -248,6 +256,29 @@ class ActivityLocalRepository {
     }
 
     return rows;
+  }
+
+  Future<void> clearOptionalCache() async {
+    final rows = await runStorageWrite('activity cache cleanup', () {
+      return _database.delete(
+        'activities',
+        where: '''
+          id NOT LIKE ?
+          AND id NOT IN (SELECT activity_id FROM joined_activities)
+          AND id NOT IN (
+            SELECT activity_id
+            FROM pending_actions
+            WHERE action_type = 'CREATE_ACTIVITY'
+          )
+        ''',
+        whereArgs: ['$localActivityIdPrefix%'],
+      );
+    });
+
+    if (rows > 0) {
+      _cache.clear();
+      _notifyActivitiesChanged();
+    }
   }
 
   void clearCache() => _cache.clear();

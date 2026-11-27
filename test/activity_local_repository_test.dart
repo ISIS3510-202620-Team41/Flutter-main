@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:llamalla/database/app_database.dart';
+import 'package:llamalla/models/activity.dart';
 import 'package:llamalla/models/activity_record.dart';
 import 'package:llamalla/models/storage_capacity.dart';
 import 'package:llamalla/repositories/activity_local_repository.dart';
@@ -162,6 +163,79 @@ void main() {
         );
         expect(await guardedRepository.getAll(), isEmpty);
         expect(reportedErrors, hasLength(3));
+      } finally {
+        FlutterError.onError = previousErrorHandler;
+        await guardedRepository.dispose();
+      }
+    },
+  );
+
+  test(
+    'cleans cached activities but preserves essential activity records',
+    () async {
+      final db = await appDatabase.database;
+      final reportedErrors = <FlutterErrorDetails>[];
+      final previousErrorHandler = FlutterError.onError;
+      FlutterError.onError = reportedErrors.add;
+      final guardedRepository = ActivityLocalRepository(
+        db,
+        capacityService: StorageCapacityService(
+          readAvailableBytes: () async => 10,
+          minimumFreeBytes: 100,
+          safetyMarginBytes: 0,
+        ),
+      );
+      final offlineActivity = ActivityRecord(
+        id: '${localActivityIdPrefix}draft',
+        title: 'Offline activity',
+        category: 'DEPORTES',
+        startTime: activity.startTime,
+        endTime: activity.endTime,
+        locationName: activity.locationName,
+        latitude: activity.latitude,
+        longitude: activity.longitude,
+        participants: 0,
+        cachedAt: activity.cachedAt,
+      );
+      final cachedActivity = ActivityRecord(
+        id: 'activity-cache',
+        title: 'Cached activity',
+        category: 'DEPORTES',
+        startTime: activity.startTime,
+        endTime: activity.endTime,
+        locationName: activity.locationName,
+        latitude: activity.latitude,
+        longitude: activity.longitude,
+        participants: 0,
+        cachedAt: activity.cachedAt,
+      );
+
+      try {
+        await guardedRepository.upsertAll([
+          activity,
+          offlineActivity,
+          cachedActivity,
+        ], policy: ActivityWritePolicy.essential);
+        await db.insert('joined_activities', {
+          'user_id': 'user-1',
+          'activity_id': activity.id,
+          'enrollment_status': 'CONFIRMED',
+          'sync_status': 'SYNCED',
+          'created_at': activity.cachedAt.toIso8601String(),
+          'updated_at': activity.cachedAt.toIso8601String(),
+        });
+
+        await expectLater(
+          guardedRepository.upsertAll([activity]),
+          throwsA(isA<StorageWriteException>()),
+        );
+
+        expect(
+          (await guardedRepository.getAll()).map((item) => item.id).toSet(),
+          {activity.id, offlineActivity.id},
+        );
+        expect(await db.query('joined_activities'), hasLength(1));
+        expect(reportedErrors, hasLength(1));
       } finally {
         FlutterError.onError = previousErrorHandler;
         await guardedRepository.dispose();

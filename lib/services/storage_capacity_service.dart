@@ -69,11 +69,22 @@ class StorageCapacityService {
     try {
       final availableBytes = await _readAvailableBytes();
       if (availableBytes < 0) {
+        final error = StateError(
+          'The platform returned a negative storage value: $availableBytes.',
+        );
+        _reportError(
+          StorageWriteException(
+            kind: StorageFailureKind.provider,
+            operation: 'capacity query',
+            cause: error,
+          ),
+          StackTrace.current,
+        );
         return StorageCapacity(
           status: StorageCapacityStatus.unavailable,
           availableBytes: null,
           requiredFreeBytes: requiredFreeBytes,
-          errorMessage: 'The platform returned a negative storage value.',
+          errorMessage: error.toString(),
           failureKind: StorageFailureKind.provider,
         );
       }
