@@ -1,4 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:flutter/foundation.dart';
+
+import '../services/storage_capacity_service.dart';
+import '../services/storage_cleanup_service.dart';
 
 // Disk cache for activity photos, used by CachedNetworkImage.
 //Las fotos se almacenan como archivos,
@@ -17,11 +23,51 @@ class ActivityImageCacheManager {
 
   //Descarga fotos en segundo plano para que estén en el disco
   static Future<void> prefetch(Iterable<String> urls) async {
+    final capacityService = StorageCapacityService();
+    final capacity = await StorageCleanupService(
+      capacityService: capacityService,
+      steps: [
+        StorageCleanupStep(
+          name: 'managed activity images',
+          cleanup: () => instance.emptyCache(),
+        ),
+      ],
+    ).makeRoomForOptionalWrite();
+    if (!capacity.canWriteOptionalData) {
+      if (!capacity.hasCapacityInformation) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: StateError(
+              capacity.errorMessage ?? 'Unable to check storage capacity.',
+            ),
+            stack: StackTrace.current,
+            library: 'activity image cache',
+          ),
+        );
+      }
+      return;
+    }
+
     for (final url in urls) {
       if (url.isEmpty) continue;
       try {
         await instance.getSingleFile(url);
-      } catch (_) {
+      } on FileSystemException catch (error, stackTrace) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'activity image cache',
+          ),
+        );
+      } on Exception catch (error, stackTrace) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'activity image cache',
+          ),
+        );
       }
     }
   }

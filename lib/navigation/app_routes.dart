@@ -9,4 +9,5 @@ class AppRoutes {
 
   static const activityDetail = '/activity-detail';
   static const activityCreated = '/activity-created';
+  static const activityComparison = '/activities/compare';
 }

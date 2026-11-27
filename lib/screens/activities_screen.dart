@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../models/activity.dart';
@@ -10,7 +9,7 @@ import '../widgets/map_preview.dart';
 import '../viewmodels/activity_view_model.dart';
 import '../widgets/pending_sync_badge.dart';
 import '../widgets/category_preferences_sheet.dart';
-
+import '../navigation/app_routes.dart';
 
 class ActivitiesScreen extends StatefulWidget {
   const ActivitiesScreen({super.key, this.onOpenDetail});
@@ -59,6 +58,20 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                     ),
 
                     const SizedBox(height: 18),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.activityComparison,
+                        ),
+                        icon: const Icon(Icons.compare_arrows, size: 18),
+                        label: const Text('Comparar actividades'),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
 
                     Row(
                       children: [

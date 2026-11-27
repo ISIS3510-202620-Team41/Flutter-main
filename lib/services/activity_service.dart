@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:llamalla/repositories/activity_local_repository.dart';
+import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import '../database/local_database_facade.dart';
 import '../utils/distance_calculator.dart';
@@ -34,19 +36,22 @@ class RecommendationBatch {
 }
 
 class ActivityService {
+  static const _nearbyPageSize = 50;
+
   ActivityService({
     AuthService? authService,
     ActivityLocalRepository? localRepository,
-    }): _authService = authService ?? AuthService(),
-        _injectedLocalRepository = localRepository;
+    ActivityImageCacheService? imageCache,
+  }) : _authService = authService ?? AuthService(),
+       _injectedLocalRepository = localRepository,
+       _imageCache = imageCache ?? ActivityImageCacheService();
 
   final AuthService _authService;
   final ActivityLocalRepository? _injectedLocalRepository;
-  final ActivityImageCacheService _imageCache = ActivityImageCacheService();
-  
-  ActivityLocalRepository? get _localRepository =>
-    _injectedLocalRepository ?? LocalDatabaseFacade.instance.activities;
+  final ActivityImageCacheService _imageCache;
 
+  ActivityLocalRepository? get _localRepository =>
+      _injectedLocalRepository ?? LocalDatabaseFacade.instance.activities;
 
   Future<RecommendationBatch> getRecommendations({
     required double lat,
@@ -276,6 +281,7 @@ class ActivityService {
     final records = await repository.getPendingSync();
     return records.map((record) => record.toActivity()).toList(growable: false);
   }
+
   Future<Activity> createActivity(
       Map<String, dynamic> body, {
         String? source,
@@ -383,6 +389,12 @@ class ActivityService {
     );
   }
 
+  Future<List<ActivityRecord>> getCachedActivityRecords() async {
+    final repository = _localRepository;
+    if (repository == null) return const [];
+    return repository.getAll();
+  }
+
   Stream<List<Activity>> watchCachedActivities({double? lat, double? lon, double radiusKm = 50,}) {
     final repository = _localRepository;
 
@@ -436,7 +448,14 @@ class ActivityService {
       }
 
       await repository.upsertAll(updatedRecords);
-    } catch (_) { 
+    } on DatabaseException catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'activity persistence cache',
+        ),
+      );
     }
   }
 
@@ -445,19 +464,45 @@ class ActivityService {
     required double lon,
     required double radiusKm,
   }) async {
-    final response = await _authService.authenticatedCachedGet(
-      path: '/activities?lat=$lat&lon=$lon&radius=$radiusKm',
-    );
+    final records = <ActivityRecord>[];
+    var page = 0;
 
-    _check(response, 'load nearby activities');
+    while (true) {
+      final response = await _authService.authenticatedCachedGet(
+        path:
+            '/activities?lat=$lat&lon=$lon&radius=$radiusKm'
+            '&page=$page&size=$_nearbyPageSize',
+      );
+      _check(response, 'load nearby activities');
 
-    return _decodeList(response.body)
-        .map(
-          (item) => ActivityRecord.fromJson(
-            Map<String, dynamic>.from(item as Map),
-          ),
-        )
-        .toList(growable: false);
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map ||
+          decoded['content'] is! List ||
+          decoded['page'] is! num ||
+          decoded['hasNext'] is! bool ||
+          (decoded['page'] as num).toInt() != page) {
+        throw const ActivityException('Invalid paginated activity response.');
+      }
+
+      final content = decoded['content'] as List;
+      if (content.isEmpty && decoded['hasNext'] == true) {
+        throw const ActivityException(
+          'Activity pagination returned an empty page with more results.',
+        );
+      }
+
+      records.addAll(
+        content.map(
+          (item) =>
+              ActivityRecord.fromJson(Map<String, dynamic>.from(item as Map)),
+        ),
+      );
+
+      if (decoded['hasNext'] != true) break;
+      page++;
+    }
+
+    return records;
   }
 
   void _check(http.Response response, String action) {
