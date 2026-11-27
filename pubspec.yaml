@@ -28,6 +28,7 @@ dependencies:
   connectivity_plus: 6.1.5
   cached_network_image: 4.0.3
   flutter_cache_manager: ^3.4.6
+  storage_space: ^1.4.0
 
 dev_dependencies:
   flutter_test:
