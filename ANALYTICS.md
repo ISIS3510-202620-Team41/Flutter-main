@@ -11,6 +11,14 @@ retried in the background. The normal app flow does not depend on the
 analytics engine being available. Events remain queued until a user ID can be
 derived from the authenticated access-token JWT.
 
+Activity creation emits `plan_creation_attempted` through `AnalyticsFacade`
+with the BQ14 context and a UUID `attemptId`. The same ID is sent to the
+backend and retained with offline `CREATE_ACTIVITY` actions; retries reuse it
+without emitting another attempt event. The backend owns
+`plan_creation_result`. The context records the selected category, selected
+activity duration as `freeTimeMinutes`, location coordinates, and available
+versus selected available friends.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and set the engine settings there:

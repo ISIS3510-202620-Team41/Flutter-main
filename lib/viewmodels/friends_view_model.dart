@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/activity.dart';
+import '../models/plan_creation_context.dart';
 import '../services/friends_service.dart';
 import '../services/location_service.dart';
 import '../models/activity_draft.dart';
@@ -10,7 +11,7 @@ import '../services/activity_service.dart';
 
 class FriendsViewModel extends ChangeNotifier {
   FriendsViewModel({FriendsService? friendsService})
-      : _friendsService = friendsService ?? FriendsService();
+    : _friendsService = friendsService ?? FriendsService();
 
   final FriendsService _friendsService;
 
@@ -31,20 +32,22 @@ class FriendsViewModel extends ChangeNotifier {
     query = value;
     notifyListeners();
   }
-/// Consulta /friends/gaps para que el backend registre el evento "viewed"
+
+  /// Consulta /friends/gaps para que el backend registre el evento "viewed"
   Future<void> load() async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
     try {
-        _friends = await _friendsService.loadAvailableFriends();
+      _friends = await _friendsService.loadAvailableFriends();
     } catch (_) {
-        errorMessage = 'No pudimos cargar tus amigos.';
+      errorMessage = 'No pudimos cargar tus amigos.';
     } finally {
-        isLoading = false;
-        notifyListeners();
+      isLoading = false;
+      notifyListeners();
     }
   }
+
   Future<String?> sendRequest(String email) async {
     try {
       await _friendsService.sendRequest(email.trim());
@@ -64,12 +67,14 @@ class ActivityCreationViewModel extends ChangeNotifier {
     LocationService? locationService,
     DateTime Function()? now,
     this.source,
-  })  : selectedFriends = [...(initialFriends ?? const ['Alex'])],
-        _repository = repository ?? ActivityRepository(),
-        _friendsService = friendsService ?? FriendsService(),
-        _activityService = activityService ?? ActivityService(),
-        _locationService = locationService ?? LocationService(),
-        _now = now ?? DateTime.now;
+  }) : selectedFriends = [
+         ...(initialFriends ?? const ['Alex']),
+       ],
+       _repository = repository ?? ActivityRepository(),
+       _friendsService = friendsService ?? FriendsService(),
+       _activityService = activityService ?? ActivityService(),
+       _locationService = locationService ?? LocationService(),
+       _now = now ?? DateTime.now;
 
   final ActivityRepository _repository;
   final FriendsService _friendsService;
@@ -208,8 +213,16 @@ class ActivityCreationViewModel extends ChangeNotifier {
     final place = selectedPlace!;
     final category = selectedCategory!;
     final start = _now().add(const Duration(minutes: 30));
+    final availableFriendNames = availableFriends
+        .map((friend) => friend.name)
+        .toSet();
+    final selectedAvailableFriendsCount = selectedFriends
+        .toSet()
+        .where(availableFriendNames.contains)
+        .length;
     return ActivityDraft(
       clientId: const Uuid().v4(),
+      attemptId: const Uuid().v4(),
       title: '${category.label} at ${place.name}',
       category: category.backendValue,
       startTime: start,
@@ -222,6 +235,15 @@ class ActivityCreationViewModel extends ChangeNotifier {
       capacity: place.capacity,
       aboutLocation: place.description,
       imageUrl: place.imageUrl,
+      planCreationContext: PlanCreationContext(
+        preferences: [category.backendValue],
+        freeTimeMinutes: place.durationMinutes,
+        locationName: place.name,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        availableFriendsCount: availableFriends.length,
+        selectedAvailableFriendsCount: selectedAvailableFriendsCount,
+      ),
     );
   }
 }

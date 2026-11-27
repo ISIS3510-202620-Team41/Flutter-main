@@ -2,11 +2,15 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:uuid/uuid.dart';
 
+import '../analytics/analytics_facade.dart';
 import '../database/local_database_facade.dart';
 import '../models/activity.dart';
 import '../models/activity_draft.dart';
+import '../models/plan_creation_context.dart';
 import '../models/pending_action.dart';
 import '../services/activity_service.dart';
 import '../services/session_user.dart';
@@ -26,13 +30,15 @@ class ActivityRepository {
     ActivityService? service,
     ActivityLocalRepository? localRepository,
     PendingActionsRepository? pendingActions,
+    AnalyticsFacade? analyticsFacade,
     Future<bool> Function()? isOnline,
     Future<String?> Function()? userId,
-  })  : _service = service ?? ActivityService(),
-        _injectedLocal = localRepository,
-        _injectedPending = pendingActions,
-        _isOnline = isOnline ?? _defaultIsOnline,
-        _userId = userId ?? currentUserId;
+  }) : _service = service ?? ActivityService(),
+       _injectedLocal = localRepository,
+       _injectedPending = pendingActions,
+       _analyticsFacade = analyticsFacade ?? AnalyticsFacade.instance,
+       _isOnline = isOnline ?? _defaultIsOnline,
+       _userId = userId ?? currentUserId;
 
   static const _timeout = Duration(seconds: 10);
 
@@ -42,6 +48,7 @@ class ActivityRepository {
   final ActivityService _service;
   final ActivityLocalRepository? _injectedLocal;
   final PendingActionsRepository? _injectedPending;
+  final AnalyticsFacade _analyticsFacade;
   final Future<bool> Function() _isOnline;
   final Future<String?> Function() _userId;
 
@@ -56,11 +63,17 @@ class ActivityRepository {
   }
 
   Future<CreateResult> create(ActivityDraft draft, {String? source}) async {
+    final attemptId = draft.attemptId ?? const Uuid().v4();
+    final context = _contextFor(draft);
+    final requestBody = draft.toRequestJson(attemptIdOverride: attemptId);
+
+    await _publishCreationAttempt(attemptId, context);
+
     // Comprueba la conexión antes de crear
     if (await _isOnline()) {
       try {
         final activity = await _service
-            .createActivity(draft.toRequestJson(), source: source)
+            .createActivity(requestBody, source: source)
             .timeout(_timeout);
 
         await _joinCreator(activity.id);
@@ -70,10 +83,14 @@ class ActivityRepository {
         if (!_isNetworkError(error)) rethrow;
       }
     }
-    return _saveOffline(draft);
+    return _saveOffline(draft, requestBody: requestBody, context: context);
   }
 
-  Future<CreateResult> _saveOffline(ActivityDraft draft) async {
+  Future<CreateResult> _saveOffline(
+    ActivityDraft draft, {
+    required Map<String, dynamic> requestBody,
+    required PlanCreationContext context,
+  }) async {
     final local = _local;
     final pending = _pending;
     final userId = await _userId();
@@ -89,17 +106,19 @@ class ActivityRepository {
 
     final now = DateTime.now().toUtc();
     try {
-      await pending.enqueue(PendingAction(
-        id: draft.clientId,
-        userId: userId,
-        type: PendingActionType.createActivity,
-        activityId: localId,
-        payload: draft.toRequestJson(),
-        status: PendingActionStatus.pending,
-        attempts: 0,
-        createdAt: now,
-        updatedAt: now,
-      ));
+      await pending.enqueue(
+        PendingAction(
+          id: draft.clientId,
+          userId: userId,
+          type: PendingActionType.createActivity,
+          activityId: localId,
+          payload: {...requestBody, '_planCreationContext': context.toMap()},
+          status: PendingActionStatus.pending,
+          attempts: 0,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
     } catch (_) {
       await local.delete(localId);
       rethrow;
@@ -138,14 +157,18 @@ class ActivityRepository {
           attempts: action.attempts + 1,
         );
         try {
-          final created =
-              await _service.createActivity(action.payload).timeout(_timeout);
+          final requestBody = Map<String, dynamic>.from(action.payload)
+            ..remove('_planCreationContext');
+          final created = await _service
+              .createActivity(requestBody)
+              .timeout(_timeout);
           await _joinCreator(created.id);
           await local.delete(action.activityId);
           await pending.delete(action.id);
           synced++;
         } catch (error) {
-          final rejected = error is ActivityException &&
+          final rejected =
+              error is ActivityException &&
               (error.statusCode ?? 0) >= 400 &&
               (error.statusCode ?? 0) < 500 &&
               error.statusCode != 401 &&
@@ -167,7 +190,40 @@ class ActivityRepository {
     }
   }
 
-// El backend no inscribe al creador solo (responde participants: 0)
+  PlanCreationContext _contextFor(ActivityDraft draft) {
+    return draft.planCreationContext ??
+        PlanCreationContext(
+          preferences: [draft.category],
+          freeTimeMinutes: draft.endTime.difference(draft.startTime).inMinutes,
+          locationName: draft.locationName,
+          latitude: draft.latitude,
+          longitude: draft.longitude,
+          availableFriendsCount: draft.friends.length,
+          selectedAvailableFriendsCount: draft.friends.length,
+        );
+  }
+
+  Future<void> _publishCreationAttempt(
+    String attemptId,
+    PlanCreationContext context,
+  ) async {
+    try {
+      await _analyticsFacade.trackPlanCreationAttempted(
+        attemptId: attemptId,
+        context: context,
+      );
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'activity creation analytics',
+        ),
+      );
+    }
+  }
+
+  // El backend no inscribe al creador solo (responde participants: 0)
   Future<void> _joinCreator(String? activityId) async {
     if (activityId == null) return;
     try {
@@ -176,8 +232,9 @@ class ActivityRepository {
       // Puede ser un 409 (ya inscrito) o un fallo de red.
     }
   }
+
   bool _isNetworkError(Object error) =>
       error is SocketException ||
-          error is TimeoutException ||
-          error is http.ClientException;
+      error is TimeoutException ||
+      error is http.ClientException;
 }

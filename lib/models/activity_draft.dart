@@ -1,5 +1,6 @@
 import 'activity.dart';
 import 'activity_record.dart';
+import 'plan_creation_context.dart';
 
 class CategoryOption {
   const CategoryOption(this.label, this.backendValue, this.emoji);
@@ -56,6 +57,8 @@ class ActivityDraft {
     required this.latitude,
     required this.longitude,
     required this.friends,
+    this.attemptId,
+    this.planCreationContext,
     this.price,
     this.capacity,
     this.aboutLocation,
@@ -71,13 +74,15 @@ class ActivityDraft {
   final double latitude;
   final double longitude;
   final List<String> friends;
+  final String? attemptId;
+  final PlanCreationContext? planCreationContext;
   final String? price;
   final int? capacity;
   final String? aboutLocation;
   final String? imageUrl;
 
   /// POST /activities.
-  Map<String, dynamic> toRequestJson() => {
+  Map<String, dynamic> toRequestJson({String? attemptIdOverride}) => {
     'title': title,
     'category': category,
     'startTime': startTime.toUtc().toIso8601String(),
@@ -88,6 +93,8 @@ class ActivityDraft {
     'price': price,
     'capacity': capacity,
     'aboutLocation': aboutLocation,
+    if (attemptIdOverride != null || attemptId != null)
+      'attemptId': attemptIdOverride ?? attemptId,
     if (imageUrl != null && imageUrl!.isNotEmpty) 'imageUrl': imageUrl,
   };
 
@@ -95,6 +102,8 @@ class ActivityDraft {
     ...toRequestJson(),
     'clientId': clientId,
     'friends': friends,
+    if (planCreationContext != null)
+      'planCreationContext': planCreationContext!.toMap(),
   };
 
   factory ActivityDraft.fromStorageJson(Map<String, dynamic> json) {
@@ -108,6 +117,12 @@ class ActivityDraft {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       friends: List<String>.from(json['friends'] as List),
+      attemptId: json['attemptId'] as String?,
+      planCreationContext: json['planCreationContext'] is Map
+          ? PlanCreationContext.fromMap(
+              Map<String, dynamic>.from(json['planCreationContext'] as Map),
+            )
+          : null,
       price: json['price'] as String?,
       capacity: (json['capacity'] as num?)?.toInt(),
       aboutLocation: json['aboutLocation'] as String?,
@@ -132,6 +147,7 @@ class ActivityDraft {
       aboutLocation: aboutLocation,
     );
   }
+
   //Fila guardada en SQLite mientras la actividad espera a ser sincronizada
   ActivityRecord toRecord(String id) => ActivityRecord(
     id: id,

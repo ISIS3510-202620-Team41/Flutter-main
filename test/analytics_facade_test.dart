@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:llamalla/analytics/analytics_facade.dart';
+import 'package:llamalla/models/plan_creation_context.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:llamalla/analytics/http_analytics_ingestion_service.dart';
 
@@ -20,14 +21,13 @@ void main() {
 
   test('persists and removes events after a successful batch', () async {
     SharedPreferences.setMockInitialValues({});
-    
+
     final client = MockClient((request) async {
       expect(request.url.path, '/events/batch');
-      
+
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       final event = (body['events'] as List).single as Map<String, dynamic>;
 
-      
       expect(event['userId'], 'user-uuid');
       expect(event['eventType'], 'screen_view');
       expect(event['screen'], 'Home');
@@ -35,10 +35,8 @@ void main() {
       return http.Response('{}', 201);
     });
     final facade = AnalyticsFacade(
-    ingestionService: HttpAnalyticsIngestionService(
-    client: client,
-  ),
-);
+      ingestionService: HttpAnalyticsIngestionService(client: client),
+    );
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -55,10 +53,8 @@ void main() {
 
     final client = MockClient((_) async => http.Response('{}', 503));
     final facade = AnalyticsFacade(
-    ingestionService: HttpAnalyticsIngestionService(
-    client: client,
-  ),
-);
+      ingestionService: HttpAnalyticsIngestionService(client: client),
+    );
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -96,8 +92,8 @@ void main() {
       feature: 'friend_availability',
       action: 'check_availability',
       screen: 'FriendAvailability',
-      );
-    
+    );
+
     final preferences = await SharedPreferences.getInstance();
     final events = preferences.getStringList('analytics_event_queue');
 
@@ -114,6 +110,41 @@ void main() {
     expect(event['appVersion'], isNotEmpty);
   });
 
+  test('tracks a Type 5 plan creation context through the facade', () async {
+    SharedPreferences.setMockInitialValues({});
+    final facade = AnalyticsFacade();
+    await facade.initialize();
+
+    await facade.trackPlanCreationAttempted(
+      attemptId: '4a3cb35e-b63b-4e16-9f98-885d20a7a4fd',
+      context: const PlanCreationContext(
+        preferences: ['DEPORTES'],
+        freeTimeMinutes: 120,
+        locationName: 'Bistro',
+        latitude: 4.6,
+        longitude: -74,
+        availableFriendsCount: 3,
+        selectedAvailableFriendsCount: 1,
+      ),
+    );
+
+    final preferences = await SharedPreferences.getInstance();
+    final events = preferences.getStringList('analytics_event_queue');
+    final event = jsonDecode(events!.single) as Map<String, dynamic>;
+
+    expect(event['eventType'], 'plan_creation_attempted');
+    expect(event['attemptId'], '4a3cb35e-b63b-4e16-9f98-885d20a7a4fd');
+    expect(event['preferences'], ['DEPORTES']);
+    expect(event['freeTimeMinutes'], 120);
+    expect(event['locationName'], 'Bistro');
+    expect(event['latitude'], 4.6);
+    expect(event['longitude'], -74);
+    expect(event['availableFriendsCount'], 3);
+    expect(event['selectedAvailableFriendsCount'], 1);
+    expect(event['eventId'], isNotEmpty);
+    expect(event['sessionId'], isNotEmpty);
+  });
+
   test('track app loading time in miliseconds', () async {
     SharedPreferences.setMockInitialValues({});
 
@@ -121,10 +152,10 @@ void main() {
     await facade.initialize();
 
     await facade.trackAppLoadingTime(
-      loadType: 'cold_start', 
+      loadType: 'cold_start',
       duration: const Duration(milliseconds: 125),
-      );
-    
+    );
+
     final preferences = await SharedPreferences.getInstance();
     final events = preferences.getStringList('analytics_event_queue');
 
@@ -148,8 +179,8 @@ void main() {
     await facade.recordCrash(
       component: 'ProfileScreen',
       error: StateError('Test error'),
-      );
-    
+    );
+
     final preferences = await SharedPreferences.getInstance();
     final crashes = preferences.getStringList('analytics_pending_crashes');
 
@@ -166,14 +197,10 @@ void main() {
     test('discards events when the engine returns HTTP $statusCode', () async {
       SharedPreferences.setMockInitialValues({});
 
-      final client = MockClient(
-          (_) async => http.Response('{}', statusCode),
-        );
+      final client = MockClient((_) async => http.Response('{}', statusCode));
       final facade = AnalyticsFacade(
-        ingestionService: HttpAnalyticsIngestionService(
-        client: client,
-      ),
-    );
+        ingestionService: HttpAnalyticsIngestionService(client: client),
+      );
 
       await facade.initialize();
       facade.setUserId('user-uuid');
@@ -183,20 +210,16 @@ void main() {
 
       final preferences = await SharedPreferences.getInstance();
 
-      expect(preferences.getStringList('analytics_event_queue'), isEmpty,);
-      },);
+      expect(preferences.getStringList('analytics_event_queue'), isEmpty);
+    });
   }
 
   test('retains events on an unexpected HTTP error', () async {
     SharedPreferences.setMockInitialValues({});
 
-    final client = MockClient(
-      (_) async => http.Response('{}', 400),
-    );
+    final client = MockClient((_) async => http.Response('{}', 400));
     final facade = AnalyticsFacade(
-      ingestionService: HttpAnalyticsIngestionService(
-      client: client,
-      ),
+      ingestionService: HttpAnalyticsIngestionService(client: client),
     );
 
     await facade.initialize();
@@ -207,10 +230,7 @@ void main() {
 
     final preferences = await SharedPreferences.getInstance();
 
-    expect(
-      preferences.getStringList('analytics_event_queue'),
-      hasLength(1),
-    );
+    expect(preferences.getStringList('analytics_event_queue'), hasLength(1));
   });
 
   test('sends retained events when the engine recovers', () async {
@@ -227,10 +247,8 @@ void main() {
     });
 
     final facade = AnalyticsFacade(
-  ingestionService: HttpAnalyticsIngestionService(
-    client: client,
-  ),
-);
+      ingestionService: HttpAnalyticsIngestionService(client: client),
+    );
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -240,20 +258,14 @@ void main() {
     await facade.flush();
 
     var preferences = await SharedPreferences.getInstance();
-    expect(
-      preferences.getStringList('analytics_event_queue'),
-      hasLength(1),
-    );
+    expect(preferences.getStringList('analytics_event_queue'), hasLength(1));
 
     await facade.flush();
 
     preferences = await SharedPreferences.getInstance();
 
     expect(requestCount, 2);
-    expect(
-      preferences.getStringList('analytics_event_queue'),
-      isEmpty,
-    );
+    expect(preferences.getStringList('analytics_event_queue'), isEmpty);
   });
 
   test('sends no more than 200 events per batch', () async {
@@ -271,10 +283,8 @@ void main() {
     });
 
     final facade = AnalyticsFacade(
-  ingestionService: HttpAnalyticsIngestionService(
-    client: client,
-  ),
-);
+      ingestionService: HttpAnalyticsIngestionService(client: client),
+    );
 
     await facade.initialize();
     facade.setUserId('user-uuid');
@@ -288,20 +298,14 @@ void main() {
     var preferences = await SharedPreferences.getInstance();
 
     expect(batchSizes, [200]);
-    expect(
-      preferences.getStringList('analytics_event_queue'),
-      hasLength(1),
-    );
+    expect(preferences.getStringList('analytics_event_queue'), hasLength(1));
 
     await facade.flush();
 
     preferences = await SharedPreferences.getInstance();
 
     expect(batchSizes, [200, 1]);
-    expect(
-      preferences.getStringList('analytics_event_queue'),
-      isEmpty,
-    );
+    expect(preferences.getStringList('analytics_event_queue'), isEmpty);
   });
 
   test('does not send events without an identified user', () async {
@@ -315,9 +319,7 @@ void main() {
     });
 
     final facade = AnalyticsFacade(
-      ingestionService: HttpAnalyticsIngestionService(
-        client: client,
-      ),
+      ingestionService: HttpAnalyticsIngestionService(client: client),
     );
 
     await facade.initialize();
@@ -327,10 +329,7 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
 
     expect(requestCount, 0);
-    expect(
-      preferences.getStringList('analytics_event_queue'),
-      hasLength(1),
-    );
+    expect(preferences.getStringList('analytics_event_queue'), hasLength(1));
   });
 
   test('sends feature_used events with the expected contract', () async {
@@ -356,9 +355,7 @@ void main() {
     });
 
     final facade = AnalyticsFacade(
-      ingestionService: HttpAnalyticsIngestionService(
-        client: client,
-      ),
+      ingestionService: HttpAnalyticsIngestionService(client: client),
     );
 
     await facade.initialize();
@@ -374,9 +371,6 @@ void main() {
 
     final preferences = await SharedPreferences.getInstance();
 
-    expect(
-      preferences.getStringList('analytics_event_queue'),
-      isEmpty,
-    );
+    expect(preferences.getStringList('analytics_event_queue'), isEmpty);
   });
 }
