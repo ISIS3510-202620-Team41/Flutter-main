@@ -4,12 +4,21 @@ import '../database/app_database.dart';
 import '../repositories/activity_local_repository.dart';
 import '../repositories/user_preferences_repository.dart';
 import '../repositories/pending_actions_repository.dart';
+import '../repositories/joined_activities_repository.dart';
 
 class LocalDatabaseService {
-  LocalDatabaseService._({required this.database, required Database connection,}) {
+  LocalDatabaseService._({
+    required this.database,
+    required Database connection,
+  }) {
     activities = ActivityLocalRepository(connection);
     preferences = UserPreferencesRepository(connection);
     pendingActions = PendingActionsRepository(connection);
+    joinedActivities = JoinedActivitiesRepository(
+      connection,
+      activities,
+      pendingActions,
+    );
   }
 
   final AppDatabase database;
@@ -17,8 +26,9 @@ class LocalDatabaseService {
   late final ActivityLocalRepository activities;
   late final UserPreferencesRepository preferences;
   late final PendingActionsRepository pendingActions;
+  late final JoinedActivitiesRepository joinedActivities;
 
-  static Future<LocalDatabaseService> open({AppDatabase? database,}) async {
+  static Future<LocalDatabaseService> open({AppDatabase? database}) async {
     final appDatabase = database ?? AppDatabase();
 
     final connection = await appDatabase.database;

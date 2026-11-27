@@ -2,6 +2,7 @@ import '../services/local_database_service.dart';
 import '../repositories/activity_local_repository.dart';
 import '../repositories/user_preferences_repository.dart';
 import '../repositories/pending_actions_repository.dart';
+import '../repositories/joined_activities_repository.dart';
 
 class LocalDatabaseFacade {
   LocalDatabaseFacade._();
@@ -19,11 +20,15 @@ class LocalDatabaseFacade {
     _databaseService = await LocalDatabaseService.open();
   }
 
-  ActivityLocalRepository? get activities =>_databaseService?.activities;
+  ActivityLocalRepository? get activities => _databaseService?.activities;
 
-  UserPreferencesRepository? get preferences =>_databaseService?.preferences;
+  UserPreferencesRepository? get preferences => _databaseService?.preferences;
 
-  PendingActionsRepository? get pendingActions =>_databaseService?.pendingActions;
+  PendingActionsRepository? get pendingActions =>
+      _databaseService?.pendingActions;
+
+  JoinedActivitiesRepository? get joinedActivities =>
+      _databaseService?.joinedActivities;
 
   Future<void> close() async {
     await _initialization;

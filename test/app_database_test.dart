@@ -1,5 +1,7 @@
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:llamalla/database/app_database.dart';
@@ -25,18 +27,14 @@ void main() {
   test('initializes all required database tables', () async {
     final db = await appDatabase.database;
 
-    final result = await db.rawQuery(
-      '''
+    final result = await db.rawQuery('''
       SELECT name
       FROM sqlite_master
       WHERE type = 'table'
       AND name NOT LIKE 'sqlite_%'
-      '''
-    );
+      ''');
 
-    final tableNames = result
-        .map((row) => row['name'] as String)
-        .toSet();
+    final tableNames = result.map((row) => row['name'] as String).toSet();
 
     expect(
       tableNames,
@@ -44,6 +42,7 @@ void main() {
         'activities',
         'user_preferences',
         'pending_actions',
+        'joined_activities',
       }),
     );
   });
@@ -52,10 +51,7 @@ void main() {
     final firstConnection = await appDatabase.database;
     final secondConnection = await appDatabase.database;
 
-    expect(
-      identical(firstConnection, secondConnection),
-      isTrue,
-    );
+    expect(identical(firstConnection, secondConnection), isTrue);
   });
 
   test('can close and reopen the database', () async {
@@ -65,9 +61,78 @@ void main() {
 
     final secondConnection = await appDatabase.database;
 
-    expect(
-      identical(firstConnection, secondConnection),
-      isFalse,
-    );
+    expect(identical(firstConnection, secondConnection), isFalse);
   });
+
+  test(
+    'adds joined activities when upgrading from database version 2',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'llamalla-db-migration-',
+      );
+      final path = p.join(directory.path, 'legacy.db');
+
+      try {
+        final oldDatabase = await databaseFactoryFfi.openDatabase(
+          path,
+          options: OpenDatabaseOptions(
+            version: 2,
+            onCreate: (db, _) async {
+              await db.execute(
+                'CREATE TABLE migration_marker (value TEXT NOT NULL)',
+              );
+              await db.insert('migration_marker', {'value': 'preserved'});
+              await db.execute('''
+              CREATE TABLE pending_actions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                activity_id TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                status TEXT NOT NULL,
+                attempts INTEGER NOT NULL,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+              )
+            ''');
+              await db.insert('pending_actions', {
+                'id': 'pending-join',
+                'user_id': 'user-a',
+                'action_type': 'JOIN_ACTIVITY',
+                'activity_id': 'activity-1',
+                'payload_json': '{}',
+                'status': 'PENDING',
+                'attempts': 0,
+                'created_at': '2026-11-20T12:00:00Z',
+                'updated_at': '2026-11-20T12:00:00Z',
+              });
+            },
+          ),
+        );
+        await oldDatabase.close();
+
+        final upgradedDatabase = AppDatabase(
+          databaseFactory: databaseFactoryFfi,
+          databasePath: path,
+        );
+        final database = await upgradedDatabase.database;
+        final marker = await database.query('migration_marker');
+        final joinedTable = await database.rawQuery('''
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'joined_activities'
+        ''');
+        final migratedEnrollment = await database.query('joined_activities');
+
+        expect(marker.single['value'], 'preserved');
+        expect(joinedTable, hasLength(1));
+        expect(migratedEnrollment.single['user_id'], 'user-a');
+        expect(migratedEnrollment.single['enrollment_status'], 'PENDING_JOIN');
+        await upgradedDatabase.close();
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }
