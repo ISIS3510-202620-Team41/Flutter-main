@@ -14,6 +14,48 @@ class PendingActionsRepository {
     );
   }
 
+  Future<void> enqueueInTransaction(
+    Transaction transaction,
+    PendingAction action,
+  ) async {
+    await transaction.insert(
+      'pending_actions',
+      action.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<void> deleteInTransaction(Transaction transaction, String id) async {
+    await transaction.delete(
+      'pending_actions',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> updateStatusInTransaction(
+    Transaction transaction, {
+    required String id,
+    required PendingActionStatus status,
+    String? lastError,
+    int? attempts,
+  }) async {
+    final values = <String, Object?>{
+      'status': status.name.toUpperCase(),
+      'last_error': lastError,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+
+    if (attempts != null) values['attempts'] = attempts;
+
+    await transaction.update(
+      'pending_actions',
+      values,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<PendingAction?> getById(String id) async {
     final result = await _database.query(
       'pending_actions',
@@ -42,7 +84,7 @@ class PendingActionsRepository {
     return result.map(PendingAction.fromMap).toList();
   }
 
-  Future<List<PendingAction>> getAllByUser(String userId,) async {
+  Future<List<PendingAction>> getAllByUser(String userId) async {
     final result = await _database.query(
       'pending_actions',
       where: 'user_id = ?',
@@ -61,10 +103,7 @@ class PendingActionsRepository {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       },
       where: 'user_id = ? AND status = ?',
-      whereArgs: [
-        userId,
-        'PROCESSING',
-      ],
+      whereArgs: [userId, 'PROCESSING'],
     );
   }
 
@@ -77,7 +116,12 @@ class PendingActionsRepository {
     );
   }
 
-  Future<int> updateStatus({required String id, required PendingActionStatus status, String? lastError, int? attempts,}) async {
+  Future<int> updateStatus({
+    required String id,
+    required PendingActionStatus status,
+    String? lastError,
+    int? attempts,
+  }) async {
     final values = <String, Object?>{
       'status': status.name.toUpperCase(),
       'last_error': lastError,

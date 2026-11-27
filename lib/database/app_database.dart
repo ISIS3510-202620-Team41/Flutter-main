@@ -6,7 +6,7 @@ class AppDatabase {
     : _databaseFactory = databaseFactory ?? sqflite.databaseFactory;
 
   static const String databaseName = 'llamalla.db';
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 3;
 
   static const _createPendingActionsTable = '''
     CREATE TABLE pending_actions (
@@ -37,6 +37,75 @@ class AppDatabase {
   static const _createPendingActionsIndex = '''
     CREATE INDEX idx_pending_actions_user_status
     ON pending_actions(user_id, status, created_at)
+  ''';
+
+  static const _createJoinedActivitiesTable = '''
+    CREATE TABLE joined_activities (
+      user_id TEXT NOT NULL,
+      activity_id TEXT NOT NULL,
+      enrollment_status TEXT NOT NULL
+        CHECK(enrollment_status IN (
+          'CONFIRMED',
+          'PENDING_JOIN',
+          'PENDING_LEAVE'
+        )),
+      sync_status TEXT NOT NULL
+        CHECK(sync_status IN (
+          'SYNCED',
+          'PENDING',
+          'PROCESSING',
+          'FAILED'
+        )),
+      enrollment_id TEXT,
+      joined_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      synced_at TEXT,
+      last_error TEXT,
+      PRIMARY KEY(user_id, activity_id)
+    )
+  ''';
+
+  static const _createJoinedActivitiesIndex = '''
+    CREATE INDEX idx_joined_activities_user_status
+    ON joined_activities(user_id, enrollment_status, updated_at)
+  ''';
+
+  static const _backfillJoinedActivitiesFromPendingActions = '''
+    INSERT OR REPLACE INTO joined_activities (
+      user_id,
+      activity_id,
+      enrollment_status,
+      sync_status,
+      enrollment_id,
+      joined_at,
+      created_at,
+      updated_at,
+      synced_at,
+      last_error
+    )
+    SELECT
+      user_id,
+      activity_id,
+      CASE action_type
+        WHEN 'JOIN_ACTIVITY' THEN 'PENDING_JOIN'
+        ELSE 'PENDING_LEAVE'
+      END,
+      CASE status
+        WHEN 'PROCESSING' THEN 'PROCESSING'
+        WHEN 'FAILED' THEN 'FAILED'
+        ELSE 'PENDING'
+      END,
+      NULL,
+      NULL,
+      created_at,
+      updated_at,
+      NULL,
+      last_error
+    FROM pending_actions
+    WHERE action_type IN ('JOIN_ACTIVITY', 'LEAVE_ACTIVITY')
+      AND status != 'COMPLETED'
+    ORDER BY created_at ASC, updated_at ASC
   ''';
 
   final sqflite.DatabaseFactory _databaseFactory;
@@ -116,6 +185,8 @@ class AppDatabase {
 
     await db.execute(_createPendingActionsTable);
     await db.execute(_createPendingActionsIndex);
+    await db.execute(_createJoinedActivitiesTable);
+    await db.execute(_createJoinedActivitiesIndex);
   }
 
   /// Actualiza incrementalmente los schemas
@@ -142,6 +213,12 @@ class AppDatabase {
       // is free to be created again.
       await db.execute('DROP TABLE pending_actions_old');
       await db.execute(_createPendingActionsIndex);
+    }
+
+    if (oldVersion < 3) {
+      await db.execute(_createJoinedActivitiesTable);
+      await db.execute(_createJoinedActivitiesIndex);
+      await db.execute(_backfillJoinedActivitiesFromPendingActions);
     }
   }
 
