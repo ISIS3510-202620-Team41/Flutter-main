@@ -4,6 +4,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/storage_capacity_service.dart';
+import '../services/storage_cleanup_service.dart';
 
 // Disk cache for activity photos, used by CachedNetworkImage.
 //Las fotos se almacenan como archivos,
@@ -22,7 +23,16 @@ class ActivityImageCacheManager {
 
   //Descarga fotos en segundo plano para que estén en el disco
   static Future<void> prefetch(Iterable<String> urls) async {
-    final capacity = await StorageCapacityService().check();
+    final capacityService = StorageCapacityService();
+    final capacity = await StorageCleanupService(
+      capacityService: capacityService,
+      steps: [
+        StorageCleanupStep(
+          name: 'managed activity images',
+          cleanup: () => instance.emptyCache(),
+        ),
+      ],
+    ).makeRoomForOptionalWrite();
     if (!capacity.canWriteOptionalData) {
       if (!capacity.hasCapacityInformation) {
         FlutterError.reportError(

@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../cache/activity_image_cache.dart';
 import 'storage_capacity_service.dart';
+import 'storage_cleanup_service.dart';
 
 typedef ImageResponseLoader = Future<http.Response> Function(Uri uri);
 typedef ImageDirectoryProvider = Future<Directory> Function();
@@ -16,6 +19,7 @@ typedef ImageCacheErrorReporter =
 class ActivityImageCacheService {
   ActivityImageCacheService({
     StorageCapacityService? capacityService,
+    StorageCleanupService? cleanupService,
     ImageResponseLoader? loadImage,
     ImageDirectoryProvider? getSupportDirectory,
     ImageCacheErrorReporter? reportError,
@@ -23,12 +27,29 @@ class ActivityImageCacheService {
        _loadImage = loadImage ?? _loadRemoteImage,
        _getSupportDirectory =
            getSupportDirectory ?? getApplicationSupportDirectory,
-       _reportError = reportError ?? _reportCacheError;
+       _reportError = reportError ?? _reportCacheError {
+    _cleanupService =
+        cleanupService ??
+        StorageCleanupService(
+          capacityService: _capacityService,
+          steps: [
+            StorageCleanupStep(
+              name: 'managed activity images',
+              cleanup: () => ActivityImageCacheManager.instance.emptyCache(),
+            ),
+            StorageCleanupStep(
+              name: 'local activity images',
+              cleanup: clearCache,
+            ),
+          ],
+        );
+  }
 
   final StorageCapacityService _capacityService;
   final ImageResponseLoader _loadImage;
   final ImageDirectoryProvider _getSupportDirectory;
   final ImageCacheErrorReporter _reportError;
+  late final StorageCleanupService _cleanupService;
 
   Future<String?> downloadAndCache({
     required String activityId,
@@ -54,7 +75,7 @@ class ActivityImageCacheService {
         return null;
       }
 
-      final capacity = await _capacityService.check(
+      final capacity = await _cleanupService.makeRoomForOptionalWrite(
         estimatedWriteBytes: response.bodyBytes.length,
       );
       if (!capacity.canWriteOptionalData) {
@@ -123,6 +144,14 @@ class ActivityImageCacheService {
       _reportError(error, stackTrace);
       await _cleanupTemporaryDirectory(temporaryDirectory);
       return null;
+    } on PlatformException catch (error, stackTrace) {
+      _reportError(error, stackTrace);
+      await _cleanupTemporaryDirectory(temporaryDirectory);
+      return null;
+    } on MissingPluginException catch (error, stackTrace) {
+      _reportError(error, stackTrace);
+      await _cleanupTemporaryDirectory(temporaryDirectory);
+      return null;
     } on FileSystemException catch (error, stackTrace) {
       _reportError(error, stackTrace);
       await _cleanupTemporaryDirectory(temporaryDirectory);
@@ -139,6 +168,17 @@ class ActivityImageCacheService {
     } on FileSystemException catch (error, stackTrace) {
       _reportError(error, stackTrace);
       return false;
+    }
+  }
+
+  Future<void> clearCache() async {
+    final supportDirectory = await _getSupportDirectory();
+    final imageDirectory = Directory(
+      p.join(supportDirectory.path, 'activity_images'),
+    );
+
+    if (await imageDirectory.exists()) {
+      await imageDirectory.delete(recursive: true);
     }
   }
 

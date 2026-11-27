@@ -6,6 +6,7 @@ import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llamalla/services/http_cache_service.dart';
 import 'package:llamalla/services/storage_capacity_service.dart';
+import 'package:llamalla/services/storage_cleanup_service.dart';
 
 class _FailingCacheStore extends MemCacheStore {
   bool writeAttempted = false;
@@ -46,10 +47,13 @@ void main() {
       final reportedErrors = <Object>[];
       final store = CapacityAwareCacheStore(
         innerStore: innerStore,
-        capacityService: StorageCapacityService(
-          readAvailableBytes: () async => 1_000,
-          minimumFreeBytes: 0,
-          safetyMarginBytes: 0,
+        cleanupService: StorageCleanupService(
+          capacityService: StorageCapacityService(
+            readAvailableBytes: () async => 1_000,
+            minimumFreeBytes: 0,
+            safetyMarginBytes: 0,
+          ),
+          steps: const [],
         ),
         reportError: (error, _) => reportedErrors.add(error),
       );
@@ -83,10 +87,13 @@ void main() {
       final reportedErrors = <Object>[];
       final store = CapacityAwareCacheStore(
         innerStore: innerStore,
-        capacityService: StorageCapacityService(
-          readAvailableBytes: () async => 5,
-          minimumFreeBytes: 10,
-          safetyMarginBytes: 5,
+        cleanupService: StorageCleanupService(
+          capacityService: StorageCapacityService(
+            readAvailableBytes: () async => 5,
+            minimumFreeBytes: 10,
+            safetyMarginBytes: 5,
+          ),
+          steps: const [],
         ),
         reportError: (error, _) => reportedErrors.add(error),
       );
@@ -105,6 +112,56 @@ void main() {
         expect(response.statusCode, 200);
         expect(innerStore.writeAttempted, isFalse);
         expect(reportedErrors, isEmpty);
+      } finally {
+        dio.close(force: true);
+      }
+    },
+  );
+
+  test(
+    'evicts regenerable cache data before retrying an HTTP cache write',
+    () async {
+      var availableBytes = 5;
+      var cleanupCount = 0;
+      final innerStore = _FailingCacheStore();
+      final cleanupService = StorageCleanupService(
+        capacityService: StorageCapacityService(
+          readAvailableBytes: () async => availableBytes,
+          minimumFreeBytes: 10,
+          safetyMarginBytes: 0,
+        ),
+        steps: [
+          StorageCleanupStep(
+            name: 'cached images',
+            cleanup: () async {
+              cleanupCount++;
+              availableBytes = 100;
+            },
+          ),
+        ],
+      );
+      final reportedErrors = <Object>[];
+      final store = CapacityAwareCacheStore(
+        innerStore: innerStore,
+        cleanupService: cleanupService,
+        reportError: (error, _) => reportedErrors.add(error),
+      );
+      final dio = Dio()..httpClientAdapter = _SuccessfulResponseAdapter();
+      dio.interceptors.add(
+        DioCacheInterceptor(
+          options: CacheOptions(store: store, policy: CachePolicy.request),
+        ),
+      );
+
+      try {
+        final response = await dio.get<Map<String, dynamic>>(
+          'https://example.test/activity',
+        );
+
+        expect(response.statusCode, 200);
+        expect(cleanupCount, 1);
+        expect(innerStore.writeAttempted, isTrue);
+        expect(reportedErrors, hasLength(1));
       } finally {
         dio.close(force: true);
       }

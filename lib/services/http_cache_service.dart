@@ -9,7 +9,10 @@ import 'package:http_cache_file_store/http_cache_file_store.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart' show DatabaseException, getDatabasesPath;
 
+import '../cache/activity_image_cache.dart';
+import 'activity_image_cache_service.dart';
 import 'storage_capacity_service.dart';
+import 'storage_cleanup_service.dart';
 
 typedef CacheStoreErrorReporter =
     void Function(Object error, StackTrace stackTrace);
@@ -17,12 +20,12 @@ typedef CacheStoreErrorReporter =
 class CapacityAwareCacheStore extends CacheStore {
   CapacityAwareCacheStore({
     required this.innerStore,
-    required this.capacityService,
+    required this.cleanupService,
     CacheStoreErrorReporter? reportError,
   }) : _reportError = reportError ?? _reportCacheError;
 
   final CacheStore innerStore;
-  final StorageCapacityService capacityService;
+  final StorageCleanupService cleanupService;
   final CacheStoreErrorReporter _reportError;
 
   @override
@@ -63,7 +66,7 @@ class CapacityAwareCacheStore extends CacheStore {
 
   @override
   Future<void> set(CacheResponse response) async {
-    final capacity = await capacityService.check(
+    final capacity = await cleanupService.makeRoomForOptionalWrite(
       estimatedWriteBytes: response.content?.length ?? 0,
     );
     if (!capacity.canWriteOptionalData) {
@@ -155,18 +158,6 @@ class HttpCacheService {
 
   Future<Dio> _createDio() async {
     final dio = Dio();
-    final capacity = await StorageCapacityService().check();
-    if (!capacity.canWriteOptionalData) {
-      if (!capacity.hasCapacityInformation) {
-        _reportCacheError(
-          StateError(
-            capacity.errorMessage ?? 'Unable to check storage capacity.',
-          ),
-          StackTrace.current,
-        );
-      }
-      return dio;
-    }
 
     try {
       final databasePath = await getDatabasesPath();
@@ -175,9 +166,48 @@ class HttpCacheService {
 
       await cacheDirectory.create(recursive: true);
 
+      final innerStore = FileCacheStore(cacheDirectory.path);
+      final capacityService = StorageCapacityService();
+      final imageCacheService = ActivityImageCacheService(
+        capacityService: capacityService,
+      );
+      final cleanupService = StorageCleanupService(
+        capacityService: capacityService,
+        steps: [
+          StorageCleanupStep(
+            name: 'stale HTTP responses',
+            cleanup: () => innerStore.clean(staleOnly: true),
+          ),
+          StorageCleanupStep(
+            name: 'managed activity images',
+            cleanup: () => ActivityImageCacheManager.instance.emptyCache(),
+          ),
+          StorageCleanupStep(
+            name: 'local activity images',
+            cleanup: imageCacheService.clearCache,
+          ),
+          StorageCleanupStep(
+            name: 'all HTTP responses',
+            cleanup: innerStore.clean,
+          ),
+        ],
+      );
+      final capacity = await cleanupService.makeRoomForOptionalWrite();
+      if (!capacity.canWriteOptionalData) {
+        if (!capacity.hasCapacityInformation) {
+          _reportCacheError(
+            StateError(
+              capacity.errorMessage ?? 'Unable to check storage capacity.',
+            ),
+            StackTrace.current,
+          );
+        }
+        return dio;
+      }
+
       final store = CapacityAwareCacheStore(
-        innerStore: FileCacheStore(cacheDirectory.path),
-        capacityService: StorageCapacityService(),
+        innerStore: innerStore,
+        cleanupService: cleanupService,
       );
       _store = store;
 
