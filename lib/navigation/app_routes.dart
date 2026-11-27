@@ -11,4 +11,5 @@ class AppRoutes {
   static const activityCreated = '/activity-created';
   static const activityComparison = '/activities/compare';
   static const myJoinedActivities = '/activities/joined';
+  static const calendar = '/calendar';
 }

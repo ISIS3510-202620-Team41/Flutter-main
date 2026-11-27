@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/schedule_service.dart';
 import '../theme/app_theme.dart';
+import '../navigation/app_routes.dart';
 import '../viewmodels/profile_view_model.dart';
 import 'edit_profile_sheet.dart';
 import '../services/photo_storage_service.dart';
@@ -714,6 +715,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pushNamed(context, AppRoutes.calendar),
+                      icon: const Icon(Icons.calendar_month_outlined),
+                      label: const Text('Ver mi agenda de actividades'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF263746),
+                        side: BorderSide(color: AppColors.blue.withValues(alpha: 0.8)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   if (_errorMessage != null) _calendarError(_errorMessage!),
