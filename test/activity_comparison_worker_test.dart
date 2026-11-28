@@ -205,6 +205,57 @@ void main() {
     },
   );
 
+  test('returns 100 when all numeric values are equal', () {
+    final records = [
+      activity(
+        id: 'a',
+        category: 'SPORTS',
+        price: 'Gratis',
+        location: 'North Hall',
+        startHour: 10,
+        durationMinutes: 60,
+        longitude: -74.0,
+        participants: 2,
+        capacity: 12,
+      ),
+      activity(
+        id: 'b',
+        category: 'CULTURE',
+        price: 'Gratis',
+        location: 'Arts Building',
+        startHour: 10,
+        durationMinutes: 60,
+        longitude: -74.0,
+        participants: 2,
+        capacity: 12,
+      ),
+    ];
+
+    final result = compareActivitiesInWorker(payload(records));
+
+    for (final activityResult in result) {
+      final contributions =
+          activityResult['contributions'] as Map<String, Object?>;
+
+      expect(
+        (contributions['duration'] as Map)['normalizedScore'],
+        100,
+      );
+      expect(
+        (contributions['price'] as Map)['normalizedScore'],
+        100,
+      );
+      expect(
+        (contributions['distance'] as Map)['normalizedScore'],
+        100,
+      );
+      expect(
+        (contributions['capacity'] as Map)['normalizedScore'],
+        100,
+      );
+    }
+  });
+
   test('supports ten activities and breaks score ties by id', () {
     final records = List.generate(
       10,

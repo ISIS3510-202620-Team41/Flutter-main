@@ -77,12 +77,17 @@ List<Map<String, Object?>> compareActivitiesInWorker(
       _requiredString(record, 'id'): _availableCapacity(record),
   };
 
+  final durationBounds = _calculateBounds(durations.values);
+  final priceBounds = _calculateBounds(prices.values);
+  final distanceBounds = _calculateBounds(distances.values);
+  final capacityBounds = _calculateBounds(capacities.values);
+
   final normalized = <String, Map<ActivityComparisonCriterion, int?>>{};
   for (final record in records) {
     final id = _requiredString(record, 'id');
     normalized[id] = {
       ActivityComparisonCriterion.duration: _normalizeNumeric(
-        durations.values,
+        durationBounds,
         durations[id],
         lowerIsBetter: true,
       ),
@@ -91,7 +96,7 @@ List<Map<String, Object?>> compareActivitiesInWorker(
         preferredCategories,
       ),
       ActivityComparisonCriterion.price: _normalizeNumeric(
-        prices.values,
+        priceBounds,
         prices[id],
         lowerIsBetter: true,
       ),
@@ -100,12 +105,12 @@ List<Map<String, Object?>> compareActivitiesInWorker(
         preferredLocation,
       ),
       ActivityComparisonCriterion.distance: _normalizeNumeric(
-        distances.values,
+        distanceBounds,
         distances[id],
         lowerIsBetter: true,
       ),
       ActivityComparisonCriterion.capacity: _normalizeNumeric(
-        capacities.values,
+        capacityBounds,
         capacities[id],
         lowerIsBetter: false,
       ),
@@ -203,16 +208,42 @@ String? _nonEmptyString(Object? value) {
   return value.trim();
 }
 
+class _NumericBounds {
+  const _NumericBounds({
+    required this.minimum,
+    required this.maximum,
+  });
+
+  final double minimum;
+  final double maximum;
+}
+
+_NumericBounds? _calculateBounds(Iterable<double?> values) {
+  double? minimum;
+  double? maximum;
+
+  for (final value in values.whereType<double>()) {
+    minimum = minimum == null ? value : math.min(minimum, value);
+    maximum = maximum == null ? value : math.max(maximum, value);
+  }
+
+  if (minimum == null || maximum == null) return null;
+
+  return _NumericBounds(
+    minimum: minimum,
+    maximum: maximum,
+  );
+}
+
 int? _normalizeNumeric(
-  Iterable<double?> values,
+  _NumericBounds? bounds,
   double? value, {
   required bool lowerIsBetter,
 }) {
-  if (value == null || !value.isFinite) return null;
-  final available = values.whereType<double>().toList(growable: false);
-  if (available.isEmpty) return null;
-  final minimum = available.reduce(math.min);
-  final maximum = available.reduce(math.max);
+  if (value == null || !value.isFinite || bounds == null) return null;
+
+  final minimum = bounds.minimum;
+  final maximum = bounds.maximum;
   if (minimum == maximum) return 100;
 
   final ratio = lowerIsBetter
