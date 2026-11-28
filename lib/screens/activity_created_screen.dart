@@ -113,29 +113,6 @@ class ActivityCreatedScreen extends StatelessWidget {
               const SizedBox(height: 8),
               MapPreview(height: 128, markerLabel: activity.locationName ?? ''),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(foregroundColor: AppColors.black),
-                    icon: const Icon(Icons.edit_outlined, size: 15),
-                    label: const Text('Editar', style: TextStyle(fontSize: 10)),
-                  ),
-                  const SizedBox(width: 6),
-                  OutlinedButton.icon(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(foregroundColor: AppColors.black),
-                    icon: const Icon(Icons.map_outlined, size: 15),
-                    label: const Text('Ver ruta', style: TextStyle(fontSize: 10)),
-                  ),
-                  const Spacer(),
-                  IconButton.filledTonal(
-                    onPressed: () {},
-                    icon: const Icon(Icons.share_outlined, size: 17),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),

@@ -42,29 +42,10 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   /// Pide un correo y envía una solicitud de amistad.
   Future<void> _askEmailAndSendRequest() async {
-    final controller = TextEditingController();
     final email = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Enviar solicitud de amistad'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(hintText: 'correo@ejemplo.com'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Enviar'),
-          ),
-        ],
-      ),
+      builder: (_) => const _FriendRequestDialog(),
     );
-    controller.dispose();
 
     if (email == null || email.trim().isEmpty || !mounted) return;
 
@@ -219,6 +200,45 @@ class _FriendsScreenState extends State<FriendsScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FriendRequestDialog extends StatefulWidget {
+  const _FriendRequestDialog();
+
+  @override
+  State<_FriendRequestDialog> createState() => _FriendRequestDialogState();
+}
+
+class _FriendRequestDialogState extends State<_FriendRequestDialog> {
+  final _emailController = TextEditingController();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Enviar solicitud de amistad'),
+      content: TextField(
+        controller: _emailController,
+        keyboardType: TextInputType.emailAddress,
+        decoration: const InputDecoration(hintText: 'correo@ejemplo.com'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _emailController.text),
+          child: const Text('Enviar'),
+        ),
+      ],
     );
   }
 }

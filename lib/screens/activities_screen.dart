@@ -190,33 +190,6 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 9),
-
-                    // Filtros adicionales.
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: const [
-                          _FilterChip(
-                            label: 'Distancia',
-                            icon: Icons.location_on_outlined,
-                          ),
-                          _FilterChip(
-                            label: 'Tiempo',
-                            icon: Icons.schedule_outlined,
-                          ),
-                          _FilterChip(
-                            label: 'Personas',
-                            icon: Icons.group_outlined,
-                          ),
-                          _FilterChip(
-                            label: 'Presupuesto',
-                            icon: Icons.attach_money,
-                          ),
-                        ],
-                      ),
-                    ),
-
                     const SizedBox(height: 12),
 
                     // Estados de carga, error y lista de actividades.
@@ -315,33 +288,6 @@ class _CategoryPill extends StatelessWidget {
             color: selected ? AppColors.white : AppColors.black,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.icon});
-
-  final String label;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(right: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.black.withValues(alpha: 0.12)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 13),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 10)),
-        ],
       ),
     );
   }
