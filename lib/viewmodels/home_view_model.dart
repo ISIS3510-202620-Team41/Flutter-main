@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -447,8 +448,7 @@ class HomeViewModel extends ChangeNotifier {
 
       wasLastJoinQueued = true;
 
-      actionMessage =
-          'Inscripción guardada. Se sincronizará cuando vuelva la conexión.';
+      actionMessage = 'Inscripción guardada y pendiente de sincronización.';
 
       notifyListeners();
 
@@ -510,7 +510,10 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   bool _isRetryableJoinError(Object error) {
-    if (error is http.ClientException || error is TimeoutException) {
+    if (error is http.ClientException ||
+        error is SocketException ||
+        error is HandshakeException ||
+        error is TimeoutException) {
       return true;
     }
 
@@ -535,6 +538,7 @@ class HomeViewModel extends ChangeNotifier {
     }
 
     _pendingActivityIds.remove(action.activityId);
+    if (_pendingActivityIds.isEmpty) actionMessage = null;
 
     recommendations = recommendations
         .where((activity) => activity.id != action.activityId)

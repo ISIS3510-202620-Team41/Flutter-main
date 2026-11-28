@@ -330,12 +330,9 @@ class AvatarSyncService {
       _isSyncing = false;
       final retryRequested = _syncRequested;
       _syncRequested = false;
-      if (retryRequested && blockedUploadId != null) {
-        final latest = await repository.getNextPending(userId);
-        if (latest != null && latest.id != blockedUploadId) {
-          _launchSync();
-        }
-      } else if (retryRequested && blockedUploadId == null) {
+      if (retryRequested &&
+          _connectivityService.isOnline == true &&
+          authSession.isAuthenticated == true) {
         _launchSync();
       }
     }

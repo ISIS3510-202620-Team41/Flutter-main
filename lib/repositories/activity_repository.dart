@@ -46,6 +46,7 @@ class ActivityRepository {
 
   // Evita sincronizaciones simultáneas
   static bool _syncing = false;
+  static bool _syncRequested = false;
 
   final ActivityService _service;
   final ActivityLocalRepository? _injectedLocal;
@@ -154,7 +155,10 @@ class ActivityRepository {
 
   // Envía en orden las tareas CREATE_ACTIVITY que están en la cola, devuelve cuántas se han sincronizado
   Future<int> syncPending() async {
-    if (_syncing) return 0;
+    if (_syncing) {
+      _syncRequested = true;
+      return 0;
+    }
     _syncing = true;
     try {
       final pending = _pending;
@@ -220,6 +224,11 @@ class ActivityRepository {
       return synced;
     } finally {
       _syncing = false;
+      final retryRequested = _syncRequested;
+      _syncRequested = false;
+      if (retryRequested) {
+        await syncPending();
+      }
     }
   }
 
@@ -271,6 +280,7 @@ class ActivityRepository {
 
   bool _isNetworkError(Object error) =>
       error is SocketException ||
+      error is HandshakeException ||
       error is TimeoutException ||
       error is http.ClientException;
 }

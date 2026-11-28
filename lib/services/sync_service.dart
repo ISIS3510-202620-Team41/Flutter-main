@@ -1,20 +1,27 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
-
 import '../repositories/activity_repository.dart';
+import 'connectivity_service.dart';
 
 class SyncService {
-  SyncService._();
+  SyncService({
+    ConnectivityService? connectivityService,
+    ActivityRepository? repository,
+  }) : _connectivityService =
+           connectivityService ?? ConnectivityService.instance,
+       _repository = repository ?? ActivityRepository();
 
-  static final instance = SyncService._();
+  static final instance = SyncService();
 
-  final _repository = ActivityRepository();
-  StreamSubscription<List<ConnectivityResult>>? _subscription;
+  final ConnectivityService _connectivityService;
+  final ActivityRepository _repository;
+  StreamSubscription<bool>? _subscription;
 
   void start() {
-    _subscription ??= Connectivity().onConnectivityChanged.listen((results) {
-      if (results.any((result) => result != ConnectivityResult.none)) {
+    _subscription ??= _connectivityService.onConnectivityChanged.listen((
+      online,
+    ) {
+      if (online) {
         unawaited(_repository.syncPending());
       }
     });

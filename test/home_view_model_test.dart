@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:llamalla/analytics/analytics_facade.dart';
@@ -620,7 +620,7 @@ void main() {
   test('queues a join when the request fails due to a network exception',
       () async {
     final activityService = _ActivityService()
-      ..joinError = http.ClientException('Connection refused');
+      ..joinError = const SocketException('Internet connection lost');
 
     final connectivity = _FakeConnectivityService(true);
 

@@ -1,6 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llamalla/analytics/analytics_facade.dart';
 import 'package:llamalla/database/app_database.dart';
@@ -19,6 +20,9 @@ class _FakeService extends ActivityService {
   final requests = <Map<String, dynamic>>[];
   final sources = <String?>[];
   Object? error;
+  bool failNextRequestWithSocket = false;
+  Completer<void>? requestGate;
+  Completer<void>? requestStarted;
 
   @override
   Future<Activity> createActivity(
@@ -27,6 +31,18 @@ class _FakeService extends ActivityService {
   }) async {
     sources.add(source);
     requests.add(Map<String, dynamic>.from(body));
+    final gate = requestGate;
+    if (gate != null) {
+      requestGate = null;
+      if (!(requestStarted?.isCompleted ?? true)) {
+        requestStarted!.complete();
+      }
+      await gate.future;
+    }
+    if (failNextRequestWithSocket) {
+      failNextRequestWithSocket = false;
+      throw const SocketException('Internet connection lost');
+    }
     if (error != null) throw error!;
     created.add(body);
     return const Activity(
@@ -308,5 +324,27 @@ void main() {
     expect(service.requests, hasLength(2));
     expect(service.requests[1]['attemptId'], firstAttemptId);
     expect(analytics.attempts, hasLength(1));
+  });
+
+  test('does not drop a reconnect signal during activity sync', () async {
+    await repository.create(draft);
+    online = true;
+
+    final gate = Completer<void>();
+    service
+      ..requestGate = gate
+      ..requestStarted = Completer<void>()
+      ..failNextRequestWithSocket = true;
+
+    final firstSync = repository.syncPending();
+    await service.requestStarted!.future;
+    await repository.syncPending();
+
+    gate.complete();
+    await firstSync;
+
+    expect(service.requests, hasLength(2));
+    expect(await pending.getPending('user-1'), isEmpty);
+    expect(await activities.getById('local-client-1'), isNull);
   });
 }

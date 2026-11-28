@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -57,6 +58,9 @@ class _TestAuthService extends AuthService {
   http.Response response = http.Response('', 200);
 
   Object? requestError;
+  bool failNextRequestWithSocket = false;
+  Completer<void>? requestGate;
+  Completer<void>? requestStarted;
 
   final List<String> requestedMethods = [];
   final List<String> requestedPaths = [];
@@ -83,6 +87,20 @@ class _TestAuthService extends AuthService {
   }) async {
     requestedMethods.add(method);
     requestedPaths.add(path);
+
+    final gate = requestGate;
+    if (gate != null) {
+      requestGate = null;
+      if (!(requestStarted?.isCompleted ?? true)) {
+        requestStarted!.complete();
+      }
+      await gate.future;
+    }
+
+    if (failNextRequestWithSocket) {
+      failNextRequestWithSocket = false;
+      throw const SocketException('Internet connection lost');
+    }
 
     final error = requestError;
 
@@ -344,6 +362,33 @@ void main() {
       expect(result!.status, PendingActionStatus.pending);
       expect(result.attempts, 1);
       expect(result.lastError, contains('Connection refused'));
+    },
+  );
+
+  test(
+    'retries a socket failure when reconnect happens during a sync',
+    () async {
+      final action = _createAction();
+      await repository.enqueue(action);
+
+      final gate = Completer<void>();
+      authService
+        ..requestGate = gate
+        ..requestStarted = Completer<void>()
+        ..failNextRequestWithSocket = true;
+
+      syncService.start();
+      final firstSync = syncService.syncPendingActions();
+      await authService.requestStarted!.future;
+      connectivity
+        ..emit(false)
+        ..emit(true);
+
+      gate.complete();
+      await firstSync;
+
+      expect(await repository.getById(action.id), isNull);
+      expect(authService.requestedPaths, hasLength(2));
     },
   );
 

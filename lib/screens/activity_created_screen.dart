@@ -146,7 +146,7 @@ class ActivityCreatedScreen extends StatelessWidget {
                       SizedBox(width: 7),
                       Expanded(
                         child: Text(
-                          'Actividad guardada localmente. Se sincronizará al reconectar',
+                          'Actividad guardada localmente.',
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
                         ),
                       ),

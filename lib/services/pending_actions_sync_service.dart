@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -55,6 +56,7 @@ class PendingActionsSyncService {
   StreamSubscription<bool>? _connectivitySubscription;
 
   bool _isSyncing = false; //Evitamos dupes de sync
+  bool _syncRequested = false;
 
   void start() {
     if (_connectivitySubscription != null) return;
@@ -62,6 +64,10 @@ class PendingActionsSyncService {
     _connectivitySubscription = _connectivityService.onConnectivityChanged
         .listen((isOnline) {
           if (isOnline && authSession.isAuthenticated == true) {
+            if (_isSyncing) {
+              _syncRequested = true;
+              return;
+            }
             unawaited(syncPendingActions());
           }
         });
@@ -176,6 +182,13 @@ class PendingActionsSyncService {
     } finally {
       // Liberamos el bloqueo incluso si ocurre una excepción.
       _isSyncing = false;
+      final retryRequested = _syncRequested;
+      _syncRequested = false;
+      if (retryRequested &&
+          _connectivityService.isOnline == true &&
+          authSession.isAuthenticated == true) {
+        await syncPendingActions();
+      }
     }
   }
 
@@ -241,7 +254,10 @@ class PendingActionsSyncService {
   }
 
   bool _isRetryableError(Object error) {
-    if (error is http.ClientException || error is TimeoutException) {
+    if (error is http.ClientException ||
+        error is SocketException ||
+        error is HandshakeException ||
+        error is TimeoutException) {
       return true;
     }
 
