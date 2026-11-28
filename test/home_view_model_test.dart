@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -218,6 +219,7 @@ HomeViewModel _createViewModel({
   ScheduleService? scheduleService,
   _RecordingAnalyticsFacade? analytics,
   _TestAuthService? authService,
+  Future<void> Function()? syncCurrentUserPlans,
 }) {
   final auth = authService ?? _TestAuthService();
 
@@ -238,6 +240,7 @@ HomeViewModel _createViewModel({
     connectivityService: connectivity,
     authService: auth,
     syncService: syncService,
+    syncCurrentUserPlans: syncCurrentUserPlans ?? () async {},
   );
 }
 
@@ -543,6 +546,35 @@ void main() {
 
     viewModel.dispose();
     await connectivity.dispose();
+  });
+
+  test('keeps a queued join successful when reminder sync fails', () async {
+    final previousErrorHandler = FlutterError.onError;
+    final reportedErrors = <FlutterErrorDetails>[];
+    FlutterError.onError = reportedErrors.add;
+    final connectivity = _FakeConnectivityService(false);
+    final viewModel = _createViewModel(
+      repository: repository,
+      connectivity: connectivity,
+      syncCurrentUserPlans: () async {
+        throw StateError('Reminder sync unavailable');
+      },
+    );
+
+    try {
+      await viewModel.load();
+      final result = await viewModel.choose(
+        viewModel.recommendations.single,
+      );
+
+      expect(result, isTrue);
+      expect(await repository.getPending('user-1'), hasLength(1));
+      expect(reportedErrors.single.exception, isA<StateError>());
+    } finally {
+      viewModel.dispose();
+      FlutterError.onError = previousErrorHandler;
+      await connectivity.dispose();
+    }
   });
 
   test('queues a join when the backend returns a retryable 503 error', () async {

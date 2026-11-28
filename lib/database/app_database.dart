@@ -9,7 +9,7 @@ class AppDatabase {
   static const int databaseVersion = 4;
 
   static const _createPendingAvatarUploadsTable = '''
-    CREATE TABLE pending_avatar_uploads (
+    CREATE TABLE IF NOT EXISTS pending_avatar_uploads (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL UNIQUE,
       local_path TEXT NOT NULL,

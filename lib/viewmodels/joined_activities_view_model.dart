@@ -22,11 +22,15 @@ class JoinedActivitiesViewModel extends ChangeNotifier {
     ConnectivityService? connectivityService,
     PendingActionsSyncService? syncService,
     DateTime Function()? now,
+    Future<void> Function()? syncCurrentUserPlans,
   }) : _activityService = activityService ?? ActivityService(),
        _authService = authService ?? AuthService(),
        _connectivityService =
            connectivityService ?? ConnectivityService.instance,
        _syncService = syncService ?? PendingActionsSyncService.instance,
+       _syncCurrentUserPlans =
+           syncCurrentUserPlans ??
+           NotificationService.instance.syncCurrentUserPlans,
        _now = now ?? DateTime.now {
     _connectivitySubscription = _connectivityService.onConnectivityChanged
         .listen(_onConnectivityChanged);
@@ -38,6 +42,7 @@ class JoinedActivitiesViewModel extends ChangeNotifier {
   final AuthService _authService;
   final ConnectivityService _connectivityService;
   final PendingActionsSyncService _syncService;
+  final Future<void> Function() _syncCurrentUserPlans;
   final DateTime Function() _now;
   late final StreamSubscription<bool> _connectivitySubscription;
   late final StreamSubscription<PendingAction> _syncSubscription;
@@ -216,8 +221,22 @@ class JoinedActivitiesViewModel extends ChangeNotifier {
     final userId = _userId;
     if (userId == null) return;
     activities = _forDisplay(await _repository.getForUser(userId));
-    await NotificationService.instance.syncCurrentUserPlans();
+    await _syncCurrentUserPlansSafely();
     _notifyIfAlive();
+  }
+
+  Future<void> _syncCurrentUserPlansSafely() async {
+    try {
+      await _syncCurrentUserPlans();
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'activity reminder synchronization',
+        ),
+      );
+    }
   }
 
   void _onConnectivityChanged(bool online) {

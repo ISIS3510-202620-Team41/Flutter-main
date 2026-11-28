@@ -11,26 +11,18 @@ void main() {
     expect(find.text('Llamalla'), findsOneWidget);
     expect(find.text('Qué bueno verte de\nnuevo'), findsOneWidget);
     expect(find.text('Continuar con Google'), findsOneWidget);
-    expect(find.text('Ingresar con biometría'), findsOneWidget);
     expect(find.text('Crear una cuenta'), findsOneWidget);
   });
 
-  testWidgets('auth provider buttons remain no-op controls', (
+  testWidgets('shows Google sign-in and login actions', (
     WidgetTester tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const LlamallaApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Continuar con Google'));
-    await tester.ensureVisible(find.text('Ingresar con biometría'));
-    await tester.tap(find.text('Ingresar con biometría'));
-    await tester.tap(find.text('Iniciar sesión'));
-    await tester.ensureVisible(find.text('Crear una cuenta'));
-    await tester.tap(find.text('Crear una cuenta'));
-    await tester.pump();
-
-    expect(find.text('Llamalla'), findsOneWidget);
+    expect(find.text('Continuar con Google'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
   });
 
   testWidgets('login validates required credentials locally', (

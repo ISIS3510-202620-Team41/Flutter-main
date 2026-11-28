@@ -34,6 +34,7 @@ class HomeViewModel extends ChangeNotifier {
     ConnectivityService? connectivityService,
     AuthService? authService,
     PendingActionsSyncService? syncService,
+    Future<void> Function()? syncCurrentUserPlans,
   }) : _profileService = profileService ?? ProfileService(),
        _scheduleService = scheduleService ?? ScheduleService(),
        _activityService = activityService ?? ActivityService(),
@@ -49,7 +50,10 @@ class HomeViewModel extends ChangeNotifier {
        _connectivityService =
            connectivityService ?? ConnectivityService.instance,
        _authService = authService ?? AuthService(),
-       _syncService = syncService ?? PendingActionsSyncService.instance {
+       _syncService = syncService ?? PendingActionsSyncService.instance,
+       _syncCurrentUserPlans =
+           syncCurrentUserPlans ??
+           NotificationService.instance.syncCurrentUserPlans {
     _syncSubscription = _syncService.onActionSynced.listen(_onActionSynced);
   }
 
@@ -64,6 +68,7 @@ class HomeViewModel extends ChangeNotifier {
   final ConnectivityService _connectivityService;
   final AuthService _authService;
   final PendingActionsSyncService _syncService;
+  final Future<void> Function() _syncCurrentUserPlans;
 
   late final StreamSubscription<PendingAction> _syncSubscription;
   String? _currentUserId;
@@ -332,7 +337,7 @@ class HomeViewModel extends ChangeNotifier {
 
       await _recordConfirmedJoin(id);
 
-      await NotificationService.instance.syncCurrentUserPlans();
+      await _syncCurrentUserPlansSafely();
 
       // Inscripcion confirmada por el back
       try {
@@ -435,7 +440,7 @@ class HomeViewModel extends ChangeNotifier {
       } else {
         await repository!.enqueue(action);
       }
-      await NotificationService.instance.syncCurrentUserPlans();
+      await _syncCurrentUserPlansSafely();
 
       _currentUserId = userId;
       _pendingActivityIds.add(activityId);
@@ -454,6 +459,20 @@ class HomeViewModel extends ChangeNotifier {
       notifyListeners();
 
       return false;
+    }
+  }
+
+  Future<void> _syncCurrentUserPlansSafely() async {
+    try {
+      await _syncCurrentUserPlans();
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'activity reminder synchronization',
+        ),
+      );
     }
   }
 

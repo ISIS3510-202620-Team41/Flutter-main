@@ -163,6 +163,7 @@ void main() {
       connectivityService: connectivity,
       syncService: syncService,
       now: () => DateTime.utc(2026, 11, 26),
+      syncCurrentUserPlans: () async {},
     );
   });
 

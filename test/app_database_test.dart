@@ -180,4 +180,60 @@ void main() {
       }
     },
   );
+
+  test(
+    'preserves an existing avatar queue when upgrading from database version 3',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'llamalla-avatar-migration-',
+      );
+      final path = p.join(directory.path, 'legacy.db');
+
+      try {
+        final oldDatabase = await databaseFactoryFfi.openDatabase(
+          path,
+          options: OpenDatabaseOptions(
+            version: 3,
+            onCreate: (db, _) async {
+              await db.execute('''
+                CREATE TABLE pending_avatar_uploads (
+                  id TEXT PRIMARY KEY,
+                  user_id TEXT NOT NULL UNIQUE,
+                  local_path TEXT NOT NULL,
+                  status TEXT NOT NULL DEFAULT 'PENDING'
+                    CHECK(status IN ('PENDING', 'PROCESSING', 'FAILED')),
+                  attempt_count INTEGER NOT NULL DEFAULT 0,
+                  last_error TEXT,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                )
+              ''');
+              await db.insert('pending_avatar_uploads', {
+                'id': 'upload-1',
+                'user_id': 'user-a',
+                'local_path': '/tmp/avatar.jpg',
+                'created_at': '2026-11-20T12:00:00Z',
+                'updated_at': '2026-11-20T12:00:00Z',
+              });
+            },
+          ),
+        );
+        await oldDatabase.close();
+
+        final upgradedDatabase = AppDatabase(
+          databaseFactory: databaseFactoryFfi,
+          databasePath: path,
+        );
+        final database = await upgradedDatabase.database;
+        final uploads = await database.query('pending_avatar_uploads');
+
+        expect(uploads, hasLength(1));
+        expect(uploads.single['id'], 'upload-1');
+        expect(uploads.single['user_id'], 'user-a');
+        await upgradedDatabase.close();
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }
