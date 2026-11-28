@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
 import '../utils/media_url.dart';
 
@@ -8,7 +9,7 @@ void showEditProfile({
   required String currentDescription,
   required Future<String?> Function(String name, String description) onSave,
   String? currentAvatarUrl,
-  required Future<String?> Function() onTakePhoto,
+  required Future<String?> Function(ImageSource source) onPickImage,
 }) {
   showModalBottomSheet(
     context: context,
@@ -22,7 +23,7 @@ void showEditProfile({
       currentDescription: currentDescription,
       onSave: onSave,
       currentAvatarUrl: currentAvatarUrl,
-      onTakePhoto: onTakePhoto,
+      onPickImage: onPickImage,
     ),
   );
 }
@@ -32,7 +33,7 @@ class EditProfileContent extends StatefulWidget {
   final String currentDescription;
   final Future<String?> Function(String, String) onSave;
   final String? currentAvatarUrl;
-  final Future<String?> Function() onTakePhoto;
+  final Future<String?> Function(ImageSource source) onPickImage;
 
   const EditProfileContent({
     super.key,
@@ -40,7 +41,7 @@ class EditProfileContent extends StatefulWidget {
     required this.currentDescription,
     required this.onSave,
     this.currentAvatarUrl,
-    required this.onTakePhoto,
+    required this.onPickImage,
   });
 
   @override
@@ -75,7 +76,35 @@ class _EditProfileContentState extends State<EditProfileContent> {
     super.dispose();
   }
 
-  Future<void> _takePhoto() async {
+  Future<void> _chooseImageSource() async {
+    if (uploadingPhoto) return;
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Tomar foto'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Elegir de galería'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source != null) await _pickPhoto(source);
+  }
+
+  Future<void> _pickPhoto(ImageSource source) async {
     if (uploadingPhoto) return;
     setState(() {
       uploadingPhoto = true;
@@ -84,7 +113,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
     String? newUrl;
     String? error;
     try {
-      newUrl = await widget.onTakePhoto();
+      newUrl = await widget.onPickImage(source);
     } catch (e) {
       error = e.toString();
     }
@@ -206,7 +235,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
                     right: 0,
                     bottom: 0,
                     child: GestureDetector(
-                      onTap: _takePhoto,
+                      onTap: _chooseImageSource,
                       child: Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
@@ -224,7 +253,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
                           ),
                         )
                             : const Icon(
-                          Icons.camera_alt,
+                          Icons.add_a_photo,
                           size: 12,
                           color: Colors.white,
                         ),

@@ -1,3 +1,5 @@
+import 'package:image/image.dart' as img;
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -6,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/schedule_service.dart';
 import '../theme/app_theme.dart';
+import '../navigation/app_routes.dart';
 import '../viewmodels/profile_view_model.dart';
 import 'edit_profile_sheet.dart';
 import '../services/photo_storage_service.dart';
@@ -71,7 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       currentName: _profile?.name ?? '',
       currentDescription: _profile?.bio ?? '',
       currentAvatarUrl: _profile?.avatarUrl,
-      onTakePhoto: _takeProfilePhoto,
+      onPickImage: _pickProfilePhoto,
       // Devuelve null si guardó bien, o el mensaje de error para mostrarlo
       // dentro del sheet.
       onSave: (newName, newDescription) async {
@@ -89,28 +92,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Abre la cámara, guarda una copia privada y la sube al backend.
-  // Devuelve la URL nueva, o null si el usuario canceló. Si algo falla lanza
-  // un ProfileException con el mensaje; el sheet lo muestra.
-  Future<String?> _takeProfilePhoto() async {
+  // Permite seleccionar desde cámara o galería. La imagen se normaliza a
+  // JPEG antes de subirla para evitar errores por formatos HEIC/WEBP/etc.
+  Future<String?> _pickProfilePhoto(ImageSource source) async {
     XFile? photo;
     try {
       photo = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1024, // el backend la reduce a 512 igual y acepta hasta 5 MB
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
         imageQuality: 85,
         preferredCameraDevice: CameraDevice.front,
       );
     } catch (_) {
-      throw const ProfileException('No pudimos abrir la cámara.');
+      throw ProfileException(
+        source == ImageSource.camera
+            ? 'No pudimos abrir la cámara.'
+            : 'No pudimos abrir la galería.',
+      );
     }
-    if (photo == null) return null; // el usuario canceló
+    if (photo == null) return null;
 
     String savedPath;
     try {
-      savedPath = (await PhotoStorageService().savePhoto(photo.path)).path;
+      // Flutter's dart:ui no permite codificar directamente a JPEG.
+      // Usamos package:image para decodificar la foto y volverla a codificar.
+      final originalBytes = await photo.readAsBytes();
+      final decodedImage = img.decodeImage(originalBytes);
+      if (decodedImage == null) {
+        throw const FormatException('El archivo seleccionado no es una imagen válida.');
+      }
+      final orientedImage = img.bakeOrientation(decodedImage);
+      final jpegBytes = img.encodeJpg(orientedImage, quality: 85);
+      final saved = await PhotoStorageService().savePhotoBytes(jpegBytes);
+      savedPath = saved.path;
     } catch (_) {
-      throw const ProfileException('No pudimos guardar la foto en tu teléfono.');
+      throw const ProfileException(
+        'La imagen no se pudo procesar. Prueba con otra foto.',
+      );
     }
 
     final profile = await _profileViewModel.uploadAvatar(savedPath);
@@ -714,6 +733,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pushNamed(context, AppRoutes.calendar),
+                      icon: const Icon(Icons.calendar_month_outlined),
+                      label: const Text('Ver mi agenda de actividades'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF263746),
+                        side: BorderSide(color: AppColors.blue.withValues(alpha: 0.8)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   if (_errorMessage != null) _calendarError(_errorMessage!),
