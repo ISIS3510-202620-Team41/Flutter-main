@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -72,7 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       currentName: _profile?.name ?? '',
       currentDescription: _profile?.bio ?? '',
       currentAvatarUrl: _profile?.avatarUrl,
-      onTakePhoto: _takeProfilePhoto,
+      onPickImage: _pickProfilePhoto,
       // Devuelve null si guardó bien, o el mensaje de error para mostrarlo
       // dentro del sheet.
       onSave: (newName, newDescription) async {
@@ -90,28 +92,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Abre la cámara, guarda una copia privada y la sube al backend.
-  // Devuelve la URL nueva, o null si el usuario canceló. Si algo falla lanza
-  // un ProfileException con el mensaje; el sheet lo muestra.
-  Future<String?> _takeProfilePhoto() async {
+  // Permite seleccionar desde cámara o galería. La imagen se normaliza a
+  // JPEG antes de subirla para evitar errores por formatos HEIC/WEBP/etc.
+  Future<String?> _pickProfilePhoto(ImageSource source) async {
     XFile? photo;
     try {
       photo = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1024, // el backend la reduce a 512 igual y acepta hasta 5 MB
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
         imageQuality: 85,
         preferredCameraDevice: CameraDevice.front,
       );
     } catch (_) {
-      throw const ProfileException('No pudimos abrir la cámara.');
+      throw ProfileException(
+        source == ImageSource.camera
+            ? 'No pudimos abrir la cámara.'
+            : 'No pudimos abrir la galería.',
+      );
     }
-    if (photo == null) return null; // el usuario canceló
+    if (photo == null) return null;
 
     String savedPath;
     try {
-      savedPath = (await PhotoStorageService().savePhoto(photo.path)).path;
+      final codec = await ui.instantiateImageCodec(await photo.readAsBytes());
+      try {
+        final frame = await codec.getNextFrame();
+        try {
+          final jpegData = await frame.image.toByteData(
+            format: ui.ImageByteFormat.jpeg,
+          );
+          if (jpegData == null) {
+            throw const FormatException('No se pudo convertir la imagen a JPEG.');
+          }
+          final saved = await PhotoStorageService().savePhotoBytes(
+            jpegData.buffer.asUint8List(),
+          );
+          savedPath = saved.path;
+        } finally {
+          frame.image.dispose();
+        }
+      } finally {
+        codec.dispose();
+      }
     } catch (_) {
-      throw const ProfileException('No pudimos guardar la foto en tu teléfono.');
+      throw const ProfileException(
+        'La imagen no se pudo procesar. Prueba con otra foto.',
+      );
     }
 
     final profile = await _profileViewModel.uploadAvatar(savedPath);

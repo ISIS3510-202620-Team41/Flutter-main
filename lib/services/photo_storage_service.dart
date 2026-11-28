@@ -34,6 +34,16 @@ class PhotoStorageService {
     return File(sourcePath).copy(p.join(folder.path, fileName));
   }
 
+  Future<File> savePhotoBytes(List<int> bytes) async {
+      final root = await _documentsDirectory();
+      final folder = Directory(p.join(root.path, _folderName));
+      if (!await folder.exists()) {
+        await folder.create(recursive: true);
+      }
+      final file = File(p.join(folder.path, '${_uuid.v4()}.jpg'));
+      return file.writeAsBytes(bytes, flush: true);
+    }
+
   Future<bool> exists(String path) => File(path).exists();
 
   Future<void> delete(String path) async {
