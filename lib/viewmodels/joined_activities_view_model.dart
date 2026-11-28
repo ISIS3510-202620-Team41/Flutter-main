@@ -12,6 +12,7 @@ import '../services/activity_service.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/pending_actions_sync_service.dart';
+import '../services/notification_service.dart';
 
 class JoinedActivitiesViewModel extends ChangeNotifier {
   JoinedActivitiesViewModel(
@@ -209,6 +210,7 @@ class JoinedActivitiesViewModel extends ChangeNotifier {
     final userId = _userId;
     if (userId == null) return;
     activities = _forDisplay(await _repository.getForUser(userId));
+    await NotificationService.instance.syncCurrentUserPlans();
     _notifyIfAlive();
   }
 
