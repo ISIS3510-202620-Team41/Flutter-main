@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../navigation/app_routes.dart';
 import 'analytics_screen_catalog.dart';
 
-class AnalyticsNavigatorObserver extends NavigatorObserver {
+class AnalyticsNavigatorObserver extends RouteObserver<ModalRoute<dynamic>> {
   AnalyticsNavigatorObserver({
     required this.initialScreenResolver,
     required this.onScreenView,

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/activity.dart';
+import '../models/plan_creation_context.dart';
 import '../services/friends_service.dart';
 import '../services/location_service.dart';
 import '../models/activity_draft.dart';
@@ -10,7 +11,7 @@ import '../services/activity_service.dart';
 
 class FriendsViewModel extends ChangeNotifier {
   FriendsViewModel({FriendsService? friendsService})
-      : _friendsService = friendsService ?? FriendsService();
+    : _friendsService = friendsService ?? FriendsService();
 
   final FriendsService _friendsService;
 
@@ -31,20 +32,22 @@ class FriendsViewModel extends ChangeNotifier {
     query = value;
     notifyListeners();
   }
-/// Consulta /friends/gaps para que el backend registre el evento "viewed"
+
+  /// Consulta /friends/gaps para que el backend registre el evento "viewed"
   Future<void> load() async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
     try {
-        _friends = await _friendsService.loadAvailableFriends();
+      _friends = await _friendsService.loadAvailableFriends();
     } catch (_) {
-        errorMessage = 'No pudimos cargar tus amigos.';
+      errorMessage = 'No pudimos cargar tus amigos.';
     } finally {
-        isLoading = false;
-        notifyListeners();
+      isLoading = false;
+      notifyListeners();
     }
   }
+
   Future<String?> sendRequest(String email) async {
     try {
       await _friendsService.sendRequest(email.trim());
@@ -58,18 +61,21 @@ class FriendsViewModel extends ChangeNotifier {
 class ActivityCreationViewModel extends ChangeNotifier {
   ActivityCreationViewModel({
     List<String>? initialFriends,
+    this.freeTimeMinutes,
     ActivityRepository? repository,
     FriendsService? friendsService,
     ActivityService? activityService,
     LocationService? locationService,
     DateTime Function()? now,
     this.source,
-  })  : selectedFriends = [...(initialFriends ?? const ['Alex'])],
-        _repository = repository ?? ActivityRepository(),
-        _friendsService = friendsService ?? FriendsService(),
-        _activityService = activityService ?? ActivityService(),
-        _locationService = locationService ?? LocationService(),
-        _now = now ?? DateTime.now;
+  }) : selectedFriends = (initialFriends ?? const [])
+           .map((friend) => friend.trim().toLowerCase())
+           .toList(),
+       _repository = repository ?? ActivityRepository(),
+       _friendsService = friendsService ?? FriendsService(),
+       _activityService = activityService ?? ActivityService(),
+       _locationService = locationService ?? LocationService(),
+       _now = now ?? DateTime.now;
 
   final ActivityRepository _repository;
   final FriendsService _friendsService;
@@ -77,7 +83,9 @@ class ActivityCreationViewModel extends ChangeNotifier {
   final LocationService _locationService;
   final DateTime Function() _now;
   final String? source;
+  final int? freeTimeMinutes;
 
+  // Contains stable identifiers (email when available), not display names.
   final List<String> selectedFriends;
   CategoryOption? selectedCategory;
   PlaceOption? selectedPlace;
@@ -92,12 +100,25 @@ class ActivityCreationViewModel extends ChangeNotifier {
   bool isLoadingFriends = true;
   String? friendsError;
 
+  List<FriendStatus> get selectedAvailableFriends => availableFriends
+      .where(isFriendSelected)
+      .toList(growable: false);
+
+  List<String> get selectedFriendNames => selectedAvailableFriends
+      .map((friend) => friend.name)
+      .toList(growable: false);
+
+  bool isFriendSelected(FriendStatus friend) =>
+      selectedFriends.contains(_friendIdentifier(friend));
+
   Future<void> loadFriends() async {
     isLoadingFriends = true;
     friendsError = null;
     notifyListeners();
     try {
       availableFriends = await _friendsService.loadAvailableFriends();
+      final availableIds = availableFriends.map(_friendIdentifier).toSet();
+      selectedFriends.retainWhere(availableIds.contains);
     } catch (_) {
       friendsError = 'No pudimos cargar a tus amigos.';
     } finally {
@@ -150,10 +171,19 @@ class ActivityCreationViewModel extends ChangeNotifier {
     }
   }
 
-  void toggleFriend(String friend) {
-    selectedFriends.contains(friend)
-        ? selectedFriends.remove(friend)
-        : selectedFriends.add(friend);
+  void toggleFriend(FriendStatus friend) {
+    final identifier = _friendIdentifier(friend);
+    if (identifier.isEmpty ||
+        !availableFriends.any(
+          (availableFriend) =>
+              _friendIdentifier(availableFriend) == identifier,
+        )) {
+      return;
+    }
+
+    selectedFriends.contains(identifier)
+        ? selectedFriends.remove(identifier)
+        : selectedFriends.add(identifier);
     notifyListeners();
   }
 
@@ -168,7 +198,9 @@ class ActivityCreationViewModel extends ChangeNotifier {
   }
 
   String? get validationError {
-    if (selectedFriends.isEmpty) return 'Select at least one friend.';
+    if (selectedAvailableFriends.isEmpty) {
+      return 'Select at least one friend.';
+    }
     if (selectedCategory == null) return 'Choose a type of activity.';
     if (selectedPlace == null) return 'Choose a place.';
     return null;
@@ -208,8 +240,14 @@ class ActivityCreationViewModel extends ChangeNotifier {
     final place = selectedPlace!;
     final category = selectedCategory!;
     final start = _now().add(const Duration(minutes: 30));
+    final availableFriendIds = availableFriends.map(_friendIdentifier).toSet();
+    final selectedAvailableFriendsCount = selectedFriends
+        .toSet()
+        .intersection(availableFriendIds)
+        .length;
     return ActivityDraft(
       clientId: const Uuid().v4(),
+      attemptId: const Uuid().v4(),
       title: '${category.label} at ${place.name}',
       category: category.backendValue,
       startTime: start,
@@ -217,11 +255,27 @@ class ActivityCreationViewModel extends ChangeNotifier {
       locationName: place.name,
       latitude: place.latitude,
       longitude: place.longitude,
-      friends: List<String>.from(selectedFriends),
+      friends: selectedFriendNames,
       price: place.price,
       capacity: place.capacity,
       aboutLocation: place.description,
       imageUrl: place.imageUrl,
+      planCreationContext: PlanCreationContext(
+        preferences: [category.backendValue],
+        freeTimeMinutes: freeTimeMinutes,
+        locationName: place.name,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        availableFriendsCount: availableFriends.length,
+        selectedAvailableFriendsCount: selectedAvailableFriendsCount,
+      ),
     );
   }
+}
+
+String _friendIdentifier(FriendStatus friend) {
+  final email = friend.email?.trim().toLowerCase();
+  return email == null || email.isEmpty
+      ? friend.name.trim().toLowerCase()
+      : email;
 }
