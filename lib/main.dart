@@ -5,6 +5,7 @@ import 'app.dart';
 import 'analytics/analytics_facade.dart';
 import 'services/sync_service.dart';
 import 'services/notification_service.dart';
+import 'services/avatar_sync_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +16,7 @@ Future<void> main() async {
   await AnalyticsFacade.instance.initialize();
 
   await LocalDatabaseFacade.instance.initialize();
+  AvatarSyncService.instance.start();
 
   await NotificationService.instance.initialize();
   // Recuperar y programar las actividades guardadas localmente.

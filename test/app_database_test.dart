@@ -43,6 +43,7 @@ void main() {
         'user_preferences',
         'pending_actions',
         'joined_activities',
+        'pending_avatar_uploads',
       }),
     );
   });
@@ -129,6 +130,50 @@ void main() {
         expect(joinedTable, hasLength(1));
         expect(migratedEnrollment.single['user_id'], 'user-a');
         expect(migratedEnrollment.single['enrollment_status'], 'PENDING_JOIN');
+        await upgradedDatabase.close();
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  test(
+    'creates the avatar queue when upgrading from database version 3',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'llamalla-avatar-migration-',
+      );
+      final path = p.join(directory.path, 'legacy.db');
+
+      try {
+        final oldDatabase = await databaseFactoryFfi.openDatabase(
+          path,
+          options: OpenDatabaseOptions(
+            version: 3,
+            onCreate: (db, _) async {
+              await db.execute(
+                'CREATE TABLE migration_marker (value TEXT NOT NULL)',
+              );
+              await db.insert('migration_marker', {'value': 'preserved'});
+            },
+          ),
+        );
+        await oldDatabase.close();
+
+        final upgradedDatabase = AppDatabase(
+          databaseFactory: databaseFactoryFfi,
+          databasePath: path,
+        );
+        final database = await upgradedDatabase.database;
+        final marker = await database.query('migration_marker');
+        final avatarTable = await database.rawQuery('''
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'pending_avatar_uploads'
+        ''');
+
+        expect(marker.single['value'], 'preserved');
+        expect(avatarTable, hasLength(1));
         await upgradedDatabase.close();
       } finally {
         await directory.delete(recursive: true);

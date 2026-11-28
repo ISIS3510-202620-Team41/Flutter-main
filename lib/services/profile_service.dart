@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
 import '../models/profile_models.dart';
+import '../utils/media_url.dart';
 import 'auth_service.dart';
 
 class ProfileException implements Exception {
@@ -45,6 +47,23 @@ class ProfileService {
       filePath: filePath,
     );
     return UserProfile.fromJson(_decode(response));
+  }
+
+  Future<Uint8List> downloadAvatarBytes(String avatarUrl) async {
+    final resolvedUrl = resolveMediaUrl(avatarUrl);
+    final uri = Uri.tryParse(resolvedUrl ?? '');
+    if (uri == null || !uri.hasAuthority) {
+      throw const ProfileException('La URL de la foto no es válida.');
+    }
+
+    final response = await http.get(uri);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw _error(response, 'descargar la foto de perfil');
+    }
+    if (response.bodyBytes.isEmpty) {
+      throw const ProfileException('El servidor devolvió una foto vacía.');
+    }
+    return response.bodyBytes;
   }
 
   Future<http.Response> _request(

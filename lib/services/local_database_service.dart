@@ -5,6 +5,7 @@ import '../repositories/activity_local_repository.dart';
 import '../repositories/user_preferences_repository.dart';
 import '../repositories/pending_actions_repository.dart';
 import '../repositories/joined_activities_repository.dart';
+import '../repositories/pending_avatar_uploads_repository.dart';
 import 'storage_capacity_service.dart';
 
 class LocalDatabaseService {
@@ -24,6 +25,7 @@ class LocalDatabaseService {
       activities,
       pendingActions,
     );
+    pendingAvatarUploads = PendingAvatarUploadsRepository(connection);
   }
 
   final AppDatabase database;
@@ -33,6 +35,7 @@ class LocalDatabaseService {
   late final UserPreferencesRepository preferences;
   late final PendingActionsRepository pendingActions;
   late final JoinedActivitiesRepository joinedActivities;
+  late final PendingAvatarUploadsRepository pendingAvatarUploads;
 
   static Future<LocalDatabaseService> open({
     AppDatabase? database,
