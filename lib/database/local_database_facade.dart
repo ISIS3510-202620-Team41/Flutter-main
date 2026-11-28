@@ -3,6 +3,7 @@ import '../repositories/activity_local_repository.dart';
 import '../repositories/user_preferences_repository.dart';
 import '../repositories/pending_actions_repository.dart';
 import '../repositories/joined_activities_repository.dart';
+import '../repositories/pending_avatar_uploads_repository.dart';
 import '../services/storage_capacity_service.dart';
 
 class LocalDatabaseFacade {
@@ -34,6 +35,9 @@ class LocalDatabaseFacade {
 
   JoinedActivitiesRepository? get joinedActivities =>
       _databaseService?.joinedActivities;
+
+  PendingAvatarUploadsRepository? get pendingAvatarUploads =>
+      _databaseService?.pendingAvatarUploads;
 
   Future<void> close() async {
     await _initialization;

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_theme.dart';
@@ -9,7 +11,9 @@ void showEditProfile({
   required String currentDescription,
   required Future<String?> Function(String name, String description) onSave,
   String? currentAvatarUrl,
+  String? currentLocalAvatarPath,
   required Future<String?> Function(ImageSource source) onPickImage,
+  Future<void> Function()? onExportAvatar,
 }) {
   showModalBottomSheet(
     context: context,
@@ -23,7 +27,9 @@ void showEditProfile({
       currentDescription: currentDescription,
       onSave: onSave,
       currentAvatarUrl: currentAvatarUrl,
+      currentLocalAvatarPath: currentLocalAvatarPath,
       onPickImage: onPickImage,
+      onExportAvatar: onExportAvatar,
     ),
   );
 }
@@ -33,7 +39,9 @@ class EditProfileContent extends StatefulWidget {
   final String currentDescription;
   final Future<String?> Function(String, String) onSave;
   final String? currentAvatarUrl;
+  final String? currentLocalAvatarPath;
   final Future<String?> Function(ImageSource source) onPickImage;
+  final Future<void> Function()? onExportAvatar;
 
   const EditProfileContent({
     super.key,
@@ -41,7 +49,9 @@ class EditProfileContent extends StatefulWidget {
     required this.currentDescription,
     required this.onSave,
     this.currentAvatarUrl,
+    this.currentLocalAvatarPath,
     required this.onPickImage,
+    this.onExportAvatar,
   });
 
   @override
@@ -53,7 +63,9 @@ class _EditProfileContentState extends State<EditProfileContent> {
   late TextEditingController descriptionController;
   final urlController = TextEditingController();
   String? avatarUrl;
+  String? localAvatarPath;
   bool uploadingPhoto = false;
+  bool exportingPhoto = false;
   bool saving = false;
   String? formError; // error que se muestra dentro del sheet
 
@@ -62,6 +74,7 @@ class _EditProfileContentState extends State<EditProfileContent> {
     super.initState();
     // Start with what the profile already had
     avatarUrl = widget.currentAvatarUrl;
+    localAvatarPath = widget.currentLocalAvatarPath;
     nameController = TextEditingController(text: widget.currentName);
     descriptionController = TextEditingController(
       text: widget.currentDescription,
@@ -110,10 +123,10 @@ class _EditProfileContentState extends State<EditProfileContent> {
       uploadingPhoto = true;
       formError = null;
     });
-    String? newUrl;
+    String? newPath;
     String? error;
     try {
-      newUrl = await widget.onPickImage(source);
+      newPath = await widget.onPickImage(source);
     } catch (e) {
       error = e.toString();
     }
@@ -121,8 +134,19 @@ class _EditProfileContentState extends State<EditProfileContent> {
     setState(() {
       uploadingPhoto = false;
       formError = error;
-      if (newUrl != null) avatarUrl = newUrl;
+      if (newPath != null) localAvatarPath = newPath;
     });
+  }
+
+  Future<void> _exportPhoto() async {
+    final export = widget.onExportAvatar;
+    if (export == null || exportingPhoto) return;
+    setState(() => exportingPhoto = true);
+    try {
+      await export();
+    } finally {
+      if (mounted) setState(() => exportingPhoto = false);
+    }
   }
 
   // Guarda y cierra el sheet. Si falla, muestra el error acá mismo
@@ -170,11 +194,11 @@ class _EditProfileContentState extends State<EditProfileContent> {
     final initials = nameController.text.trim().isEmpty
         ? '?'
         : nameController.text
-        .trim()
-        .split(' ')
-        .take(2)
-        .map((p) => p[0].toUpperCase())
-        .join();
+              .trim()
+              .split(' ')
+              .take(2)
+              .map((p) => p[0].toUpperCase())
+              .join();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -219,17 +243,20 @@ class _EditProfileContentState extends State<EditProfileContent> {
                   CircleAvatar(
                     radius: 38,
                     backgroundColor: AppColors.blue,
-                    backgroundImage:
-                    avatarUrl != null ? NetworkImage(resolveMediaUrl(avatarUrl)!) : null,
-                    child: avatarUrl != null
+                    backgroundImage: localAvatarPath != null
+                        ? FileImage(File(localAvatarPath!))
+                        : avatarUrl != null
+                        ? NetworkImage(resolveMediaUrl(avatarUrl)!)
+                        : null,
+                    child: localAvatarPath != null || avatarUrl != null
                         ? null
                         : Text(
-                      initials,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        color: Colors.white,
-                      ),
-                    ),
+                            initials,
+                            style: const TextStyle(
+                              fontSize: 26,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                   Positioned(
                     right: 0,
@@ -245,24 +272,40 @@ class _EditProfileContentState extends State<EditProfileContent> {
                         ),
                         child: uploadingPhoto
                             ? const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Icon(
-                          Icons.add_a_photo,
-                          size: 12,
-                          color: Colors.white,
-                        ),
+                                Icons.add_a_photo,
+                                size: 12,
+                                color: Colors.white,
+                              ),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
+            if (widget.onExportAvatar != null &&
+                (localAvatarPath != null || avatarUrl != null))
+              Align(
+                alignment: Alignment.center,
+                child: TextButton.icon(
+                  onPressed: exportingPhoto ? null : _exportPhoto,
+                  icon: exportingPhoto
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download_outlined, size: 16),
+                  label: const Text('Guardar foto en el dispositivo'),
+                ),
+              ),
             const SizedBox(height: 14),
             // URL field + "Usar" button
             Row(
@@ -349,17 +392,17 @@ class _EditProfileContentState extends State<EditProfileContent> {
                 ),
                 child: saving
                     ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text(
-                  'Guardar cambios',
-                  style: TextStyle(fontSize: 15),
-                ),
+                        'Guardar cambios',
+                        style: TextStyle(fontSize: 15),
+                      ),
               ),
             ),
           ],

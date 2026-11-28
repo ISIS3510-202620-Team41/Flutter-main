@@ -6,7 +6,21 @@ class AppDatabase {
     : _databaseFactory = databaseFactory ?? sqflite.databaseFactory;
 
   static const String databaseName = 'llamalla.db';
-  static const int databaseVersion = 3;
+  static const int databaseVersion = 4;
+
+  static const _createPendingAvatarUploadsTable = '''
+    CREATE TABLE pending_avatar_uploads (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      local_path TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK(status IN ('PENDING', 'PROCESSING', 'FAILED')),
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  ''';
 
   static const _createPendingActionsTable = '''
     CREATE TABLE pending_actions (
@@ -187,6 +201,7 @@ class AppDatabase {
     await db.execute(_createPendingActionsIndex);
     await db.execute(_createJoinedActivitiesTable);
     await db.execute(_createJoinedActivitiesIndex);
+    await db.execute(_createPendingAvatarUploadsTable);
   }
 
   /// Actualiza incrementalmente los schemas
@@ -219,6 +234,10 @@ class AppDatabase {
       await db.execute(_createJoinedActivitiesTable);
       await db.execute(_createJoinedActivitiesIndex);
       await db.execute(_backfillJoinedActivitiesFromPendingActions);
+    }
+
+    if (oldVersion < 4) {
+      await db.execute(_createPendingAvatarUploadsTable);
     }
   }
 

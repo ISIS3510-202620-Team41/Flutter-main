@@ -18,11 +18,13 @@ import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/step1_invite_screen.dart';
 import 'screens/activity_reminders_screen.dart';
+import 'database/local_database_facade.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'services/connectivity_service.dart';
 import 'widgets/offline_banner.dart';
 import 'services/pending_actions_sync_service.dart';
+import 'services/avatar_sync_service.dart';
 
 class LlamallaApp extends StatefulWidget {
   const LlamallaApp({super.key});
@@ -117,6 +119,7 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
 
     // Si el usuario cierra sesión, regresamos al login.
     if (authSession.isAuthenticated == false) {
+      LocalDatabaseFacade.instance.joinedActivities?.clearMemoryCache();
       _navigatorKey.currentState?.pushNamedAndRemoveUntil(
         AppRoutes.login,
         (_) => false,
@@ -136,6 +139,10 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
 
   Future<void> _refreshAndSync() async {
     await _connectivityService.refresh();
+
+    if (authSession.isAuthenticated == true) {
+      AvatarSyncService.instance.requestSyncCurrentUser();
+    }
 
     if (authSession.isAuthenticated == true &&
         _connectivityService.isOnline == true) {

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llamalla/models/profile_models.dart';
 import 'package:llamalla/services/profile_service.dart';
 import 'package:llamalla/viewmodels/profile_view_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _ProfileService extends ProfileService {
   UserProfile profile = const UserProfile(
@@ -42,6 +43,10 @@ class _ProfileService extends ProfileService {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   test('loads and updates profile through the view model', () async {
     final service = _ProfileService();
     final viewModel = ProfileViewModel(profileService: service);
