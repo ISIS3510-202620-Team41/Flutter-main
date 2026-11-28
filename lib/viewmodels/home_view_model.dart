@@ -19,6 +19,7 @@ import '../repositories/pending_actions_repository.dart';
 import '../services/auth_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/pending_actions_sync_service.dart';
+import '../services/notification_service.dart';
 
 class HomeViewModel extends ChangeNotifier {
   HomeViewModel({
@@ -331,6 +332,8 @@ class HomeViewModel extends ChangeNotifier {
 
       await _recordConfirmedJoin(id);
 
+      await NotificationService.instance.syncCurrentUserPlans();
+
       // Inscripcion confirmada por el back
       try {
         await _analyticsFacade.trackFeatureUsed(
@@ -432,6 +435,7 @@ class HomeViewModel extends ChangeNotifier {
       } else {
         await repository!.enqueue(action);
       }
+      await NotificationService.instance.syncCurrentUserPlans();
 
       _currentUserId = userId;
       _pendingActivityIds.add(activityId);

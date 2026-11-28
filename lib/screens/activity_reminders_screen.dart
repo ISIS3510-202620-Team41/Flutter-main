@@ -1,7 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 
 class ActivityRemindersScreen extends StatefulWidget {
@@ -59,6 +59,7 @@ class _ActivityRemindersScreenState
 
     try {
       await _savePreference(key, value);
+      await NotificationService.instance.syncCurrentUserPlans();
     } catch (_) {
       if (!mounted) return;
       await _loadPreferences();
@@ -160,6 +161,31 @@ class _ActivityRemindersScreenState
                     activeThumbColor: AppColors.black,
                     activeTrackColor: AppColors.blue,
                   ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final granted =
+                        await NotificationService.instance.requestPermissions();
+
+                    if (!mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          granted
+                              ? 'Permisos de notificaciones habilitados.'
+                              : 'Debes permitir las notificaciones desde los ajustes.',
+                        ),
+                      ),
+                    );
+
+                    if (granted) {
+                      await NotificationService.instance.syncCurrentUserPlans();
+                    }
+                  },
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: const Text('Permitir notificaciones'),
                 ),
                 const SizedBox(height: 18),
                 const Padding(
