@@ -77,7 +77,7 @@ class ActivityComparisonService {
        _now = now ?? DateTime.now;
 
   static const dataFreshness = Duration(hours: 24);
-  static const searchradiusKm = 5.0;
+  static const searchRadiusKm = 5.0;
 
   final ActivityService _activityService;
   final LocationService _locationService;
