@@ -52,8 +52,11 @@ class FriendsViewModel extends ChangeNotifier {
     try {
       await _friendsService.sendRequest(email.trim());
       return null;
-    } catch (_) {
-      return 'No pudimos enviar la solicitud.';
+    } catch (error) {
+      final message = error.toString();
+      return message.startsWith('Exception: ')
+          ? message.substring('Exception: '.length)
+          : message;
     }
   }
 }
@@ -198,9 +201,7 @@ class ActivityCreationViewModel extends ChangeNotifier {
   }
 
   String? get validationError {
-    if (selectedAvailableFriends.isEmpty) {
-      return 'Select at least one friend.';
-    }
+    // Una actividad puede ser individual; invitar amigos es opcional.
     if (selectedCategory == null) return 'Choose a type of activity.';
     if (selectedPlace == null) return 'Choose a place.';
     return null;
@@ -245,9 +246,12 @@ class ActivityCreationViewModel extends ChangeNotifier {
         .toSet()
         .intersection(availableFriendIds)
         .length;
+    final freeTime = freeTimeMinutes;
     return ActivityDraft(
       clientId: const Uuid().v4(),
-      attemptId: const Uuid().v4(),
+      attemptId: freeTime != null && freeTime >= 0
+          ? const Uuid().v4()
+          : null,
       title: '${category.label} at ${place.name}',
       category: category.backendValue,
       startTime: start,
