@@ -127,14 +127,14 @@ class _ActivityService extends ActivityService {
   Future<List<Activity>> getCachedActivities({
     double? lat,
     double? lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
   }) async => cachedActivities;
 
   @override
   Future<RecommendationBatch> getRecommendations({
     required double lat,
     required double lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
     String timezone = 'America/Bogota',
     String networkQuality = 'unknown',
     bool calculateDistanceLocally = true,

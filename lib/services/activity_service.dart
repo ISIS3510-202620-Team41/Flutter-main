@@ -56,7 +56,7 @@ class ActivityService {
   Future<RecommendationBatch> getRecommendations({
     required double lat,
     required double lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
     String timezone = 'America/Bogota',
     String networkQuality = 'unknown',
     bool calculateDistanceLocally = true,
@@ -148,7 +148,7 @@ class ActivityService {
   Future<List<Activity>> getNearby({
     required double lat,
     required double lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
     bool calculateDistanceLocally = true,
   }) async {
     final records = await _fetchNearbyRecords(
@@ -220,7 +220,7 @@ class ActivityService {
   Future<List<PlaceOption>> getNearbyPlaces({
     required double lat,
     required double lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
   }) async {
     final records = await _fetchNearbyRecords(
       lat: lat,
@@ -279,7 +279,7 @@ class ActivityService {
   Future<void> refreshNearby({
     required double lat,
     required double lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
   }) async {
     final records = await _fetchNearbyRecords(
       lat: lat,
@@ -388,7 +388,7 @@ class ActivityService {
     List<ActivityRecord> records, {
     double? lat,
     double? lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
   }) async {
     // No location valid no calculamos distancias
     if (lat == null || lon == null) {
@@ -429,7 +429,7 @@ class ActivityService {
   Future<List<Activity>> getCachedActivities({
     double? lat,
     double? lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
   }) async {
     final repository = _localRepository;
 
@@ -456,7 +456,7 @@ class ActivityService {
   Stream<List<Activity>> watchCachedActivities({
     double? lat,
     double? lon,
-    double radiusKm = 50,
+    double radiusKm = 5,
   }) {
     final repository = _localRepository;
 
