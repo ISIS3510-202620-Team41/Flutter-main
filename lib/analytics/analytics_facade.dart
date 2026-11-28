@@ -10,14 +10,15 @@ import 'analytics_event_queue.dart';
 import 'shared_preferences_analytics_event_queue.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/plan_creation_context.dart';
 
 class AnalyticsFacade {
   AnalyticsFacade({
     AnalyticsEventQueue? eventQueue,
     AnalyticsIngestionService? ingestionService,
-    }) : _ingestionService = ingestionService ?? HttpAnalyticsIngestionService(),
-         _eventQueue = eventQueue ?? SharedPreferencesAnalyticsEventQueue(),
-         _uuid = const Uuid();
+  }) : _ingestionService = ingestionService ?? HttpAnalyticsIngestionService(),
+       _eventQueue = eventQueue ?? SharedPreferencesAnalyticsEventQueue(),
+       _uuid = const Uuid();
 
   static final instance = AnalyticsFacade();
 
@@ -40,9 +41,9 @@ class AnalyticsFacade {
     _isInitialized = true;
 
     final pendingCrashes = await _eventQueue.readPendingCrashes();
-    
+
     for (final crash in pendingCrashes) {
-      await _trackEvent('crash',crash);
+      await _trackEvent('crash', crash);
     }
 
     await _eventQueue.clearPendingCrashes();
@@ -54,34 +55,56 @@ class AnalyticsFacade {
   }
 
   // Funciones te tracking relacionadas a las BQ trackeamos screen, features y loading times
-  Future<void> trackScreenView({ required String screen,}) async {
+  Future<void> trackScreenView({required String screen}) async {
     _currentScreen = screen;
 
     if (AnalyticsScreenCatalog.dashboardTabs.contains(screen)) {
       _currentDashboardTab = screen;
     }
 
-    await _trackEvent('screen_view', {'screen': screen,});
+    await _trackEvent('screen_view', {'screen': screen});
   }
 
-  Future<void> trackFeatureUsed({required String feature, String? action, String? screen,}) {
-  return _trackEvent('feature_used', {
-    'feature': feature,
-    'action': ?action,
-    'screen': ?screen,
+  Future<void> trackFeatureUsed({
+    required String feature,
+    String? action,
+    String? screen,
+  }) {
+    return _trackEvent('feature_used', {
+      'feature': feature,
+      'action': ?action,
+      'screen': ?screen,
     });
   }
 
-  Future<void> trackAppLoadingTime({ required String loadType, required Duration duration,String? screen, String? networkQuality,}) {
-  return _trackEvent('app_loading_time', {
-    'loadType': loadType,
-    'durationMs': duration.inMilliseconds,
-    'screen' : ?screen,
-    'networkQuality' : ?networkQuality,
+  Future<void> trackPlanCreationAttempted({
+    required String attemptId,
+    required PlanCreationContext context,
+  }) {
+    return _trackEvent('plan_creation_attempted', {
+      'attemptId': attemptId,
+      ...context.toMap(),
     });
   }
 
-  Future<void> _trackEvent(String eventType, [Map<String, dynamic> fields = const {},]) async {
+  Future<void> trackAppLoadingTime({
+    required String loadType,
+    required Duration duration,
+    String? screen,
+    String? networkQuality,
+  }) {
+    return _trackEvent('app_loading_time', {
+      'loadType': loadType,
+      'durationMs': duration.inMilliseconds,
+      'screen': ?screen,
+      'networkQuality': ?networkQuality,
+    });
+  }
+
+  Future<void> _trackEvent(
+    String eventType, [
+    Map<String, dynamic> fields = const {},
+  ]) async {
     if (!_isInitialized) return;
 
     // Se agregan campos comunes a todos los eventos mas los adicionales especificos
@@ -112,7 +135,7 @@ class AnalyticsFacade {
   Future<void> flush() async {
     final userId = _userId;
 
-    if (_isFlushing || !_isInitialized || userId == null){
+    if (_isFlushing || !_isInitialized || userId == null) {
       return;
     }
 
@@ -120,19 +143,22 @@ class AnalyticsFacade {
 
     try {
       final events = await _eventQueue.readBatch(limit: 200);
-      
+
       if (events.isEmpty) return;
 
       final result = await _ingestionService.sendBatch(
-        events: events, 
-        userId: userId
+        events: events,
+        userId: userId,
       );
 
       if (result == AnalyticsIngestionResult.accepted ||
           result == AnalyticsIngestionResult.discarded) {
-            final eventIds = events.map((event) => event['eventId']).whereType<String>().toSet();
+        final eventIds = events
+            .map((event) => event['eventId'])
+            .whereType<String>()
+            .toSet();
 
-          await _eventQueue.removeEventsById(eventIds);
+        await _eventQueue.removeEventsById(eventIds);
       }
     } finally {
       _isFlushing = false;

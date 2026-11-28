@@ -48,7 +48,7 @@ class _Step3PlaceScreenState extends State<Step3PlaceScreen> {
         settings: const RouteSettings(name: AppRoutes.activityCreated),
         builder: (_) => ActivityCreatedScreen(
           activity: _viewModel.createdActivity!,
-          friends: List<String>.from(_viewModel.selectedFriends),
+          friends: List<String>.from(_viewModel.selectedFriendNames),
           savedOffline: _viewModel.savedOffline,
         ),
       ),

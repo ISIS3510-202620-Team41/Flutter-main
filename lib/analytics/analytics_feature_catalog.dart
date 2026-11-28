@@ -7,6 +7,7 @@ class AnalyticsFeatureCatalog {
   static const activityJoining = 'activity_joining';
 
   // Acciones dentro de las features
+  static const loadRecommendationsAction = 'load_recommendations';
   static const selectRecommendationAction = 'select_recommendation';
   static const viewAvailabilityAction = 'view_availability';
   static const joinRecommendedActivityAction ='join_recommended_activity';

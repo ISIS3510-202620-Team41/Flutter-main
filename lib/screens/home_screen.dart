@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import '../analytics/analytics_navigator_observer.dart';
 import '../models/activity.dart';
 import '../models/profile_models.dart';
 import '../theme/app_theme.dart';
@@ -9,19 +11,72 @@ import '../viewmodels/home_view_model.dart';
 import '../navigation/app_routes.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.onOpenFlow});
+  const HomeScreen({
+    super.key,
+    required this.routeObserver,
+    this.onOpenFlow,
+    this.isActive = true,
+  });
 
-  final VoidCallback? onOpenFlow;
+  final AnalyticsNavigatorObserver routeObserver;
+  final ValueChanged<int?>? onOpenFlow;
+  final bool isActive;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  late final HomeViewModel _viewModel = HomeViewModel()..load();
+class _HomeScreenState extends State<HomeScreen> with RouteAware {
+  late final HomeViewModel _viewModel;
+  ModalRoute<dynamic>? _route;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = HomeViewModel();
+    if (widget.isActive) _startExposure();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (_route == route) return;
+
+    if (_route != null) {
+      widget.routeObserver.unsubscribe(this);
+    }
+    _route = route;
+    if (route != null) {
+      widget.routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActive && widget.isActive) {
+      _startExposure();
+    }
+  }
+
+  @override
+  void didPopNext() {
+    if (widget.isActive) _startExposure();
+  }
+
+  void _startExposure() {
+    unawaited(_viewModel.beginRecommendationsExposure());
+    unawaited(_viewModel.load());
+  }
+
+  void _openFlow() {
+    widget.onOpenFlow?.call(_viewModel.recommendationFreeMinutes);
+  }
 
   @override
   void dispose() {
+    widget.routeObserver.unsubscribe(this);
     _viewModel.dispose();
     super.dispose();
   }
@@ -80,7 +135,9 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Header(onAdd: widget.onOpenFlow),
+              Header(
+                onAdd: widget.onOpenFlow == null ? null : _openFlow,
+              ),
               const SizedBox(height: 18),
               Text(
                 'Hola, ${_viewModel.greetingName} ',
@@ -97,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
               else if (_viewModel.errorMessage != null)
                 _ErrorCard(
                   message: _viewModel.errorMessage!,
-                  onRetry: _viewModel.load,
+                  onRetry: () => _viewModel.load(),
                 )
               else
                 _FreeWindowCard(interval: _viewModel.nextFreeInterval),
