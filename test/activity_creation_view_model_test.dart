@@ -138,6 +138,7 @@ void main() {
     );
 
     expect(await viewModel.submit(), isTrue);
+    expect(repository.createdDraft!.attemptId, isNull);
     expect(
       repository.createdDraft!.planCreationContext!.freeTimeMinutes,
       isNull,

@@ -245,9 +245,12 @@ class ActivityCreationViewModel extends ChangeNotifier {
         .toSet()
         .intersection(availableFriendIds)
         .length;
+    final freeTime = freeTimeMinutes;
     return ActivityDraft(
       clientId: const Uuid().v4(),
-      attemptId: const Uuid().v4(),
+      attemptId: freeTime != null && freeTime >= 0
+          ? const Uuid().v4()
+          : null,
       title: '${category.label} at ${place.name}',
       category: category.backendValue,
       startTime: start,

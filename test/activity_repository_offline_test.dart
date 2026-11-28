@@ -66,6 +66,7 @@ void main() {
   late _RecordingAnalyticsFacade analytics;
   late ActivityRepository repository;
   var online = false;
+  String? currentUserId = 'user-1';
 
   final draft = ActivityDraft(
     clientId: 'client-1',
@@ -94,6 +95,7 @@ void main() {
 
   setUp(() async {
     online = false;
+    currentUserId = 'user-1';
     appDatabase = AppDatabase(
       databaseFactory: databaseFactoryFfi,
       databasePath: inMemoryDatabasePath,
@@ -109,7 +111,7 @@ void main() {
       pendingActions: pending,
       analyticsFacade: analytics,
       isOnline: () async => online,
-      userId: () async => 'user-1',
+      userId: () async => currentUserId,
     );
   });
 
@@ -154,6 +156,23 @@ void main() {
   );
 
   test(
+    'online Home creation correlates the request with its Type 5 event',
+    () async {
+      online = true;
+      currentUserId = null;
+
+      await repository.create(draft);
+
+      expect(service.created, hasLength(1));
+      expect(
+        service.created.single['attemptId'],
+        analytics.attempts.single.attemptId,
+      );
+      expect(analytics.attempts, hasLength(1));
+    },
+  );
+
+  test(
     'syncPending reuses attemptId and does not republish the attempt',
     () async {
       await repository.create(draft, source: 'friend_availability');
@@ -180,7 +199,7 @@ void main() {
   );
 
   test(
-    'does not publish an invalid Type 5 attempt without free-time data',
+    'online Friends creation omits Type 5 attempt without free-time data',
     () async {
       final draftWithoutFreeTime = ActivityDraft(
         clientId: 'client-no-free-time',
@@ -203,19 +222,58 @@ void main() {
           selectedAvailableFriendsCount: 1,
         ),
       );
+      online = true;
+      currentUserId = null;
 
       final result = await repository.create(draftWithoutFreeTime);
 
-      expect(result.savedOffline, isTrue);
+      expect(result.savedOffline, isFalse);
+      expect(service.created, hasLength(1));
+      expect(service.created.single.containsKey('attemptId'), isFalse);
       expect(analytics.attempts, isEmpty);
-      final queued = await pending.getPending('user-1');
-      expect(queued.single.payload['attemptId'], draftWithoutFreeTime.attemptId);
-      expect(
-        queued.single.payload['_planCreationContext']['freeTimeMinutes'],
-        isNull,
-      );
     },
   );
+
+  test('offline Friends creation never syncs a Type 5 attempt', () async {
+    final draftWithoutFreeTime = ActivityDraft(
+      clientId: 'client-no-free-time',
+      title: draft.title,
+      category: draft.category,
+      startTime: draft.startTime,
+      endTime: draft.endTime,
+      locationName: draft.locationName,
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+      friends: draft.friends,
+      attemptId: 'a7b44835-5b58-4e8d-a5a2-fb715d1f1948',
+      planCreationContext: const PlanCreationContext(
+        preferences: ['DEPORTES'],
+        freeTimeMinutes: null,
+        locationName: 'Bistro',
+        latitude: 4.6,
+        longitude: -74,
+        availableFriendsCount: 3,
+        selectedAvailableFriendsCount: 1,
+      ),
+    );
+
+    final result = await repository.create(draftWithoutFreeTime);
+
+    expect(result.savedOffline, isTrue);
+    expect(analytics.attempts, isEmpty);
+    final queued = await pending.getPending('user-1');
+    expect(queued.single.payload.containsKey('attemptId'), isFalse);
+    expect(
+      queued.single.payload['_planCreationContext']['freeTimeMinutes'],
+      isNull,
+    );
+
+    online = true;
+    expect(await repository.syncPending(), 1);
+    expect(service.created, hasLength(1));
+    expect(service.created.single.containsKey('attemptId'), isFalse);
+    expect(analytics.attempts, isEmpty);
+  });
 
   test('analytics failure does not prevent offline activity creation', () async {
     final previousErrorHandler = FlutterError.onError;

@@ -65,11 +65,20 @@ class ActivityRepository {
   }
 
   Future<CreateResult> create(ActivityDraft draft, {String? source}) async {
-    final attemptId = draft.attemptId ?? const Uuid().v4();
     final context = _contextFor(draft);
+    final freeTimeMinutes = context.freeTimeMinutes;
+    final hasType5Context = freeTimeMinutes != null && freeTimeMinutes >= 0;
+    final attemptId = hasType5Context
+        ? draft.attemptId ?? const Uuid().v4()
+        : null;
     final requestBody = draft.toRequestJson(attemptIdOverride: attemptId);
+    if (attemptId == null) {
+      requestBody.remove('attemptId');
+    }
 
-    await _publishCreationAttempt(attemptId, context);
+    if (attemptId != null) {
+      await _publishCreationAttempt(attemptId, context);
+    }
 
     // Comprueba la conexión antes de crear
     if (await _isOnline()) {
@@ -175,6 +184,13 @@ class ActivityRepository {
         try {
           final requestBody = Map<String, dynamic>.from(action.payload)
             ..remove('_planCreationContext');
+          final context = action.payload['_planCreationContext'];
+          final freeTimeMinutes = context is Map
+              ? context['freeTimeMinutes']
+              : null;
+          if (freeTimeMinutes is! num || freeTimeMinutes < 0) {
+            requestBody.remove('attemptId');
+          }
           final source = requestBody.remove(_creationSourceKey) as String?;
           final created = await _service
               .createActivity(requestBody, source: source)
@@ -224,7 +240,8 @@ class ActivityRepository {
     String attemptId,
     PlanCreationContext context,
   ) async {
-    if (context.freeTimeMinutes == null) return;
+    final freeTimeMinutes = context.freeTimeMinutes;
+    if (freeTimeMinutes == null || freeTimeMinutes < 0) return;
 
     try {
       await _analyticsFacade.trackPlanCreationAttempted(
