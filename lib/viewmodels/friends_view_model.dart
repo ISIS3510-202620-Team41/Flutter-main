@@ -53,10 +53,7 @@ class FriendsViewModel extends ChangeNotifier {
       await _friendsService.sendRequest(email.trim());
       return null;
     } catch (error) {
-      final message = error.toString();
-      return message.startsWith('Exception: ')
-          ? message.substring('Exception: '.length)
-          : message;
+      return error.toString().replaceFirst('Exception: ', '');
     }
   }
 }

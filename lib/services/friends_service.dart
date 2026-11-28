@@ -38,20 +38,26 @@ class FriendsService {
   }
 
   Future<void> sendRequest(String email) async {
-    final normalizedEmail = email.trim().toLowerCase();
-    if (normalizedEmail.isEmpty ||
-        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(normalizedEmail)) {
-      throw Exception('Escribe un correo electrónico válido.');
-    }
-
     final response = await _authService.authenticatedRequest(
       method: 'POST',
       path: '/friends/requests',
       headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'addresseeEmail': normalizedEmail}),
+      body: jsonEncode({
+        'addresseeEmail': email.trim().toLowerCase(),
+      }),
     );
+
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(_errorMessage(response, 'enviar la solicitud'));
+      String message = 'No se pudo enviar la solicitud';
+
+      try {
+         final data = jsonDecode(response.body);
+              if (data is Map<String, dynamic>) {
+                message = data['message']?.toString() ?? message;
+        }
+      } catch (_) {}
+
+      throw Exception('Error ${response.statusCode}: $message');
     }
   }
 
