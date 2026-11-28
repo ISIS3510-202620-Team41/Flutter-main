@@ -17,6 +17,7 @@ import 'screens/activity_created_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/step1_invite_screen.dart';
+import 'screens/activity_reminders_screen.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'services/connectivity_service.dart';
@@ -196,6 +197,7 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                 AppRoutes.activityComparison,
                 AppRoutes.myJoinedActivities,
                 AppRoutes.calendar,
+                AppRoutes.activityReminders,
               };
               if (protectedRoutes.contains(settings.name) &&
                   authSession.isAuthenticated != true) {
@@ -267,11 +269,16 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                     settings: settings,
                     builder: (_) => const MyJoinedActivitiesScreen(),
                   );
-                  case AppRoutes.calendar:
+                case AppRoutes.calendar:
                    return MaterialPageRoute<void>(
                      settings: settings,
                      builder: (_) => const CalendarScreen(),
-                     );
+                   );
+                case AppRoutes.activityReminders:
+                   return MaterialPageRoute<void>(
+                      settings: settings,
+                      builder: (_) => const ActivityRemindersScreen(),
+                       );
                 default:
                   return null;
               }

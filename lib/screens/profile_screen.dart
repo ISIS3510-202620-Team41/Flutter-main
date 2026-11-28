@@ -748,6 +748,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
+
+                  Card(
+                    elevation: 0,
+                    color: const Color(0xFFF5F9FC),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(
+                        color: AppColors.blue.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.notifications_outlined,
+                        color: AppColors.blue,
+                      ),
+                      title: const Text(
+                        'Recordatorios',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: const Text(
+                        'Configura tus avisos de actividades',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.activityReminders,
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   if (_errorMessage != null) _calendarError(_errorMessage!),
                   const SizedBox(height: 14),
                   Row(
