@@ -83,6 +83,24 @@ void main() {
       );
     });
 
+    test('notifies RouteAware subscribers when returning to a route', () {
+      final observer = AnalyticsNavigatorObserver(
+        initialScreenResolver: () => AnalyticsScreenCatalog.home,
+        onScreenView: (_) => Future<void>.value(),
+        currentDashboardTabResolver: () => AnalyticsScreenCatalog.home,
+      );
+      final homeRoute = _route(AppRoutes.home);
+      final detailRoute = _route(AppRoutes.activityDetail);
+      final routeAware = _RecordingRouteAware();
+
+      observer.subscribe(routeAware, homeRoute);
+      observer.didPush(homeRoute, null);
+      observer.didPush(detailRoute, homeRoute);
+      observer.didPop(detailRoute, homeRoute);
+
+      expect(routeAware.didPopNextCalls, 1);
+    });
+
     test('ignores routes absent from the screen catalog', () {
       final trackedScreens = <String>[];
 
@@ -101,6 +119,24 @@ void main() {
       expect(trackedScreens, isEmpty);
     });
   });
+}
+
+class _RecordingRouteAware implements RouteAware {
+  int didPopNextCalls = 0;
+
+  @override
+  void didPopNext() {
+    didPopNextCalls++;
+  }
+
+  @override
+  void didPush() {}
+
+  @override
+  void didPushNext() {}
+
+  @override
+  void didPop() {}
 }
 
 MaterialPageRoute<void> _route(String name) {

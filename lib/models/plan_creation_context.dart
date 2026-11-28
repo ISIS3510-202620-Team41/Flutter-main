@@ -10,7 +10,7 @@ class PlanCreationContext {
   });
 
   final List<String> preferences;
-  final int freeTimeMinutes;
+  final int? freeTimeMinutes;
   final String locationName;
   final double latitude;
   final double longitude;
@@ -30,7 +30,7 @@ class PlanCreationContext {
   factory PlanCreationContext.fromMap(Map<String, dynamic> map) {
     return PlanCreationContext(
       preferences: List<String>.from(map['preferences'] as List),
-      freeTimeMinutes: map['freeTimeMinutes'] as int,
+      freeTimeMinutes: (map['freeTimeMinutes'] as num?)?.toInt(),
       locationName: map['locationName'] as String,
       latitude: (map['latitude'] as num).toDouble(),
       longitude: (map['longitude'] as num).toDouble(),

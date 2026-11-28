@@ -211,7 +211,7 @@ class ActivityRepository {
     return draft.planCreationContext ??
         PlanCreationContext(
           preferences: [draft.category],
-          freeTimeMinutes: draft.endTime.difference(draft.startTime).inMinutes,
+          freeTimeMinutes: draft.planCreationContext?.freeTimeMinutes,
           locationName: draft.locationName,
           latitude: draft.latitude,
           longitude: draft.longitude,
@@ -224,6 +224,8 @@ class ActivityRepository {
     String attemptId,
     PlanCreationContext context,
   ) async {
+    if (context.freeTimeMinutes == null) return;
+
     try {
       await _analyticsFacade.trackPlanCreationAttempted(
         attemptId: attemptId,

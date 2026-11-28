@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -43,12 +44,14 @@ class _FakeService extends ActivityService {
 
 class _RecordingAnalyticsFacade extends AnalyticsFacade {
   final attempts = <({String attemptId, PlanCreationContext context})>[];
+  Object? error;
 
   @override
   Future<void> trackPlanCreationAttempted({
     required String attemptId,
     required PlanCreationContext context,
   }) async {
+    if (error != null) throw error!;
     attempts.add((attemptId: attemptId, context: context));
   }
 }
@@ -175,6 +178,60 @@ void main() {
       expect(await pending.getPending('user-1'), isEmpty);
     },
   );
+
+  test(
+    'does not publish an invalid Type 5 attempt without free-time data',
+    () async {
+      final draftWithoutFreeTime = ActivityDraft(
+        clientId: 'client-no-free-time',
+        title: draft.title,
+        category: draft.category,
+        startTime: draft.startTime,
+        endTime: draft.endTime,
+        locationName: draft.locationName,
+        latitude: draft.latitude,
+        longitude: draft.longitude,
+        friends: draft.friends,
+        attemptId: 'a7b44835-5b58-4e8d-a5a2-fb715d1f1948',
+        planCreationContext: const PlanCreationContext(
+          preferences: ['DEPORTES'],
+          freeTimeMinutes: null,
+          locationName: 'Bistro',
+          latitude: 4.6,
+          longitude: -74,
+          availableFriendsCount: 3,
+          selectedAvailableFriendsCount: 1,
+        ),
+      );
+
+      final result = await repository.create(draftWithoutFreeTime);
+
+      expect(result.savedOffline, isTrue);
+      expect(analytics.attempts, isEmpty);
+      final queued = await pending.getPending('user-1');
+      expect(queued.single.payload['attemptId'], draftWithoutFreeTime.attemptId);
+      expect(
+        queued.single.payload['_planCreationContext']['freeTimeMinutes'],
+        isNull,
+      );
+    },
+  );
+
+  test('analytics failure does not prevent offline activity creation', () async {
+    final previousErrorHandler = FlutterError.onError;
+    final reportedErrors = <FlutterErrorDetails>[];
+    addTearDown(() => FlutterError.onError = previousErrorHandler);
+    FlutterError.onError = reportedErrors.add;
+    analytics.error = StateError('analytics unavailable');
+
+    final result = await repository.create(draft);
+
+    expect(result.savedOffline, isTrue);
+    expect(await activities.getById('local-client-1'), isNotNull);
+    expect(await pending.getPending('user-1'), hasLength(1));
+    expect(reportedErrors, hasLength(1));
+    expect(reportedErrors.single.exception, analytics.error);
+  });
 
   test('a network failure retries with the same attemptId', () async {
     await repository.create(draft);

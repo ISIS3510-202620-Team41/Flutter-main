@@ -184,7 +184,7 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
               );
             },
             home: authSession.isAuthenticated == true
-                ? const DashboardScreen()
+                ? DashboardScreen(routeObserver: _analyticsObserver)
                 : const LoginScreen(),
             onGenerateRoute: (settings) {
               final protectedRoutes = {
@@ -206,7 +206,9 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                 case AppRoutes.home:
                   return MaterialPageRoute<void>(
                     settings: settings,
-                    builder: (_) => const DashboardScreen(),
+                    builder: (_) => DashboardScreen(
+                      routeObserver: _analyticsObserver,
+                    ),
                   );
                 case AppRoutes.login:
                   return MaterialPageRoute<void>(
@@ -219,11 +221,19 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
                     builder: (_) => const RegisterScreen(),
                   );
                 case AppRoutes.createActivity:
-                  final args = settings.arguments;
+                  final routeArgs = settings.arguments;
+                  final rawFreeTimeMinutes = routeArgs is Map
+                      ? routeArgs['freeTimeMinutes']
+                      : null;
                   return MaterialPageRoute<void>(
                     settings: settings,
                     builder: (_) => Step1InviteScreen(
-                      source: args is Map ? args['source'] as String? : null,
+                      source: routeArgs is Map
+                          ? routeArgs['source'] as String?
+                          : null,
+                      freeTimeMinutes: rawFreeTimeMinutes is num
+                          ? rawFreeTimeMinutes.toInt()
+                          : null,
                     ),
                   );
                 case AppRoutes.activityCreated:

@@ -86,6 +86,9 @@ class HomeViewModel extends ChangeNotifier {
   String networkQuality = 'unknown';
 
   Completer<void> _networkProbe = Completer<void>();
+  Future<void>? _loadInFlight;
+  int _recommendationsExposureId = 0;
+  int? _trackedRecommendationsExposureId;
   String get greetingName {
     final name = profile?.name.trim() ?? '';
     return name.isEmpty ? 'allí' : name.split(RegExp(r'\s+')).first;
@@ -101,7 +104,35 @@ class HomeViewModel extends ChangeNotifier {
     return interval.end.difference(interval.start).inMinutes;
   }
 
-  Future<void> load() async {
+  Future<void> beginRecommendationsExposure() async {
+    _recommendationsExposureId++;
+    _trackedRecommendationsExposureId = null;
+    recommendationId = null;
+    recommendationFreeMinutes = null;
+
+    if (recommendations.isNotEmpty) {
+      await _trackRecommendationsUsed();
+    }
+  }
+
+  Future<void> load() {
+    if (_recommendationsExposureId == 0) {
+      _recommendationsExposureId = 1;
+    }
+
+    final inFlight = _loadInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = Future<void>.microtask(_loadData);
+    _loadInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_loadInFlight, future)) {
+        _loadInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _loadData() async {
     isLoading = true;
     errorMessage = null;
     recommendationsError = null;
@@ -149,7 +180,6 @@ class HomeViewModel extends ChangeNotifier {
 
   Future<void> _loadRecommendations() async {
     recommendationsError = null;
-    var recommendationsUsageTracked = false;
 
     // Mostramos las actividades almacenadas en cache mientras obtenemos la ubicación y consultamos el backend.
     try {
@@ -164,7 +194,6 @@ class HomeViewModel extends ChangeNotifier {
 
     if (recommendations.isNotEmpty) {
       await _trackRecommendationsUsed();
-      recommendationsUsageTracked = true;
     }
 
     try {
@@ -207,9 +236,7 @@ class HomeViewModel extends ChangeNotifier {
       recommendationId = batch.recommendationId;
       recommendationFreeMinutes = batch.freeMinutes;
 
-      if (!recommendationsUsageTracked) {
-        await _trackRecommendationsUsed();
-      }
+      await _trackRecommendationsUsed();
 
       // BQ10: tiempo de carga de la pantalla de recomendaciones
       unawaited(
@@ -236,6 +263,13 @@ class HomeViewModel extends ChangeNotifier {
   }
 
   Future<void> _trackRecommendationsUsed() async {
+    if (_recommendationsExposureId == 0) {
+      _recommendationsExposureId = 1;
+    }
+    final exposureId = _recommendationsExposureId;
+    if (_trackedRecommendationsExposureId == exposureId) return;
+    _trackedRecommendationsExposureId = exposureId;
+
     try {
       await _analyticsFacade.trackFeatureUsed(
         feature: AnalyticsFeatureCatalog.activityRecommendations,

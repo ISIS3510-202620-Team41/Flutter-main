@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../analytics/analytics_navigator_observer.dart';
 import '../navigation/app_routes.dart';
 
 import '../widgets/app_bottom_nav.dart';
@@ -10,7 +11,12 @@ import 'profile_screen.dart';
 import '../viewmodels/dashboard_view_model.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({
+    super.key,
+    required this.routeObserver,
+  });
+
+  final AnalyticsNavigatorObserver routeObserver;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -33,7 +39,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final screens = <Widget>[
       HomeScreen(
-        onOpenFlow: () => Navigator.pushNamed(context, AppRoutes.createActivity),
+        routeObserver: widget.routeObserver,
+        isActive: _viewModel.selectedIndex == 0,
+        onOpenFlow: (freeTimeMinutes) {
+          Navigator.pushNamed(
+            context,
+            AppRoutes.createActivity,
+            arguments: {'freeTimeMinutes': freeTimeMinutes},
+          );
+        },
       ),
       const FriendsScreen(),
       ActivitiesScreen(

@@ -31,8 +31,10 @@ with the BQ14 context and a UUID `attemptId`. The same ID is sent to the
 backend and retained with offline `CREATE_ACTIVITY` actions; retries reuse it
 without emitting another attempt event. The backend owns
 `plan_creation_result`. The context records the selected category, selected
-activity duration as `freeTimeMinutes`, location coordinates, and available
-versus selected available friends.
+category, `recommendationFreeMinutes`, location coordinates, and available
+versus selected available friends. When recommendation free time is unavailable,
+the activity can still be created, but Flutter omits `plan_creation_attempted`
+because the Analytics-engine BQ14 event requires `freeTimeMinutes`.
 
 ## Configuration
 

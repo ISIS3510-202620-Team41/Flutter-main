@@ -61,15 +61,16 @@ class FriendsViewModel extends ChangeNotifier {
 class ActivityCreationViewModel extends ChangeNotifier {
   ActivityCreationViewModel({
     List<String>? initialFriends,
+    this.freeTimeMinutes,
     ActivityRepository? repository,
     FriendsService? friendsService,
     ActivityService? activityService,
     LocationService? locationService,
     DateTime Function()? now,
     this.source,
-  }) : selectedFriends = [
-         ...(initialFriends ?? const ['Alex']),
-       ],
+  }) : selectedFriends = (initialFriends ?? const [])
+           .map((friend) => friend.trim().toLowerCase())
+           .toList(),
        _repository = repository ?? ActivityRepository(),
        _friendsService = friendsService ?? FriendsService(),
        _activityService = activityService ?? ActivityService(),
@@ -82,7 +83,9 @@ class ActivityCreationViewModel extends ChangeNotifier {
   final LocationService _locationService;
   final DateTime Function() _now;
   final String? source;
+  final int? freeTimeMinutes;
 
+  // Contains stable identifiers (email when available), not display names.
   final List<String> selectedFriends;
   CategoryOption? selectedCategory;
   PlaceOption? selectedPlace;
@@ -97,12 +100,25 @@ class ActivityCreationViewModel extends ChangeNotifier {
   bool isLoadingFriends = true;
   String? friendsError;
 
+  List<FriendStatus> get selectedAvailableFriends => availableFriends
+      .where(isFriendSelected)
+      .toList(growable: false);
+
+  List<String> get selectedFriendNames => selectedAvailableFriends
+      .map((friend) => friend.name)
+      .toList(growable: false);
+
+  bool isFriendSelected(FriendStatus friend) =>
+      selectedFriends.contains(_friendIdentifier(friend));
+
   Future<void> loadFriends() async {
     isLoadingFriends = true;
     friendsError = null;
     notifyListeners();
     try {
       availableFriends = await _friendsService.loadAvailableFriends();
+      final availableIds = availableFriends.map(_friendIdentifier).toSet();
+      selectedFriends.retainWhere(availableIds.contains);
     } catch (_) {
       friendsError = 'No pudimos cargar a tus amigos.';
     } finally {
@@ -155,10 +171,19 @@ class ActivityCreationViewModel extends ChangeNotifier {
     }
   }
 
-  void toggleFriend(String friend) {
-    selectedFriends.contains(friend)
-        ? selectedFriends.remove(friend)
-        : selectedFriends.add(friend);
+  void toggleFriend(FriendStatus friend) {
+    final identifier = _friendIdentifier(friend);
+    if (identifier.isEmpty ||
+        !availableFriends.any(
+          (availableFriend) =>
+              _friendIdentifier(availableFriend) == identifier,
+        )) {
+      return;
+    }
+
+    selectedFriends.contains(identifier)
+        ? selectedFriends.remove(identifier)
+        : selectedFriends.add(identifier);
     notifyListeners();
   }
 
@@ -173,7 +198,9 @@ class ActivityCreationViewModel extends ChangeNotifier {
   }
 
   String? get validationError {
-    if (selectedFriends.isEmpty) return 'Select at least one friend.';
+    if (selectedAvailableFriends.isEmpty) {
+      return 'Select at least one friend.';
+    }
     if (selectedCategory == null) return 'Choose a type of activity.';
     if (selectedPlace == null) return 'Choose a place.';
     return null;
@@ -213,12 +240,10 @@ class ActivityCreationViewModel extends ChangeNotifier {
     final place = selectedPlace!;
     final category = selectedCategory!;
     final start = _now().add(const Duration(minutes: 30));
-    final availableFriendNames = availableFriends
-        .map((friend) => friend.name)
-        .toSet();
+    final availableFriendIds = availableFriends.map(_friendIdentifier).toSet();
     final selectedAvailableFriendsCount = selectedFriends
         .toSet()
-        .where(availableFriendNames.contains)
+        .intersection(availableFriendIds)
         .length;
     return ActivityDraft(
       clientId: const Uuid().v4(),
@@ -230,14 +255,14 @@ class ActivityCreationViewModel extends ChangeNotifier {
       locationName: place.name,
       latitude: place.latitude,
       longitude: place.longitude,
-      friends: List<String>.from(selectedFriends),
+      friends: selectedFriendNames,
       price: place.price,
       capacity: place.capacity,
       aboutLocation: place.description,
       imageUrl: place.imageUrl,
       planCreationContext: PlanCreationContext(
         preferences: [category.backendValue],
-        freeTimeMinutes: place.durationMinutes,
+        freeTimeMinutes: freeTimeMinutes,
         locationName: place.name,
         latitude: place.latitude,
         longitude: place.longitude,
@@ -246,4 +271,11 @@ class ActivityCreationViewModel extends ChangeNotifier {
       ),
     );
   }
+}
+
+String _friendIdentifier(FriendStatus friend) {
+  final email = friend.email?.trim().toLowerCase();
+  return email == null || email.isEmpty
+      ? friend.name.trim().toLowerCase()
+      : email;
 }

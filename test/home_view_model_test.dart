@@ -110,6 +110,9 @@ class _ActivityService extends ActivityService {
   String? joinedId;
   String? joinedRecommendationId;
   int? joinedFreeMinutes;
+  List<Activity> cachedActivities = const [];
+  Completer<RecommendationBatch>? recommendationCompleter;
+  int recommendationLoads = 0;
   bool failJoin = false;
   String? joinedNetworkQuality;
   String? joinedSource;
@@ -120,6 +123,13 @@ class _ActivityService extends ActivityService {
   Object? joinError;
 
   @override
+  Future<List<Activity>> getCachedActivities({
+    double? lat,
+    double? lon,
+    double radiusKm = 50,
+  }) async => cachedActivities;
+
+  @override
   Future<RecommendationBatch> getRecommendations({
     required double lat,
     required double lon,
@@ -127,23 +137,27 @@ class _ActivityService extends ActivityService {
     String timezone = 'America/Bogota',
     String networkQuality = 'unknown',
     bool calculateDistanceLocally = true,
-  }) async {
-    return const RecommendationBatch(
-      activities: [
-        Activity(
-          id: 'activity-1',
-          category: 'Sports',
-          name: 'Run',
-          distance: '500 m',
-          duration: '30 min',
-          price: '',
-          people: '0 registered',
-          imageUrl: '',
-        ),
-      ],
-      recommendationId: 'recommendation-1',
-      freeMinutes: 45,
-    );
+  }) {
+    recommendationLoads++;
+    return recommendationCompleter?.future ??
+        Future.value(
+          const RecommendationBatch(
+            activities: [
+              Activity(
+                id: 'activity-1',
+                category: 'Sports',
+                name: 'Run',
+                distance: '500 m',
+                duration: '30 min',
+                price: '',
+                people: '0 registered',
+                imageUrl: '',
+              ),
+            ],
+            recommendationId: 'recommendation-1',
+            freeMinutes: 45,
+          ),
+        );
   }
 
   @override
@@ -272,7 +286,19 @@ void main() {
   });
 
   test('loads recommendations and preserves join analytics context', () async {
-    final activityService = _ActivityService();
+    final activityService = _ActivityService()
+      ..cachedActivities = const [
+        Activity(
+          id: 'activity-1',
+          category: 'Sports',
+          name: 'Run',
+          distance: '500 m',
+          duration: '30 min',
+          price: '',
+          people: '0 registered',
+          imageUrl: '',
+        ),
+      ];
     final analytics = _RecordingAnalyticsFacade();
     final connectivity = _FakeConnectivityService(true);
 
@@ -322,6 +348,65 @@ void main() {
         'action': 'join_recommended_activity',
         'screen': 'Home',
       },
+    ]);
+
+    viewModel.dispose();
+    await connectivity.dispose();
+  });
+
+  test('concurrent recommendation loads share one BQ8 event', () async {
+    final activityService = _ActivityService()
+      ..recommendationCompleter = Completer<RecommendationBatch>();
+    final analytics = _RecordingAnalyticsFacade();
+    final connectivity = _FakeConnectivityService(true);
+    final viewModel = _createViewModel(
+      repository: repository,
+      connectivity: connectivity,
+      activityService: activityService,
+      analytics: analytics,
+    );
+
+    final firstLoad = viewModel.load();
+    final secondLoad = viewModel.load();
+    activityService.recommendationCompleter!.complete(
+      const RecommendationBatch(
+        activities: [],
+        recommendationId: 'recommendation-1',
+        freeMinutes: 45,
+      ),
+    );
+
+    await Future.wait([firstLoad, secondLoad]);
+
+    expect(activityService.recommendationLoads, 1);
+    expect(analytics.featureEvents.map((event) => event['action']), [
+      'load_recommendations',
+    ]);
+
+    viewModel.dispose();
+    await connectivity.dispose();
+  });
+
+  test('a new Home exposure can record recommendations again', () async {
+    final analytics = _RecordingAnalyticsFacade();
+    final connectivity = _FakeConnectivityService(true);
+    final viewModel = _createViewModel(
+      repository: repository,
+      connectivity: connectivity,
+      analytics: analytics,
+    );
+
+    await viewModel.load();
+    await viewModel.load();
+    expect(analytics.featureEvents.map((event) => event['action']), [
+      'load_recommendations',
+    ]);
+
+    await viewModel.beginRecommendationsExposure();
+    await viewModel.load();
+    expect(analytics.featureEvents.map((event) => event['action']), [
+      'load_recommendations',
+      'load_recommendations',
     ]);
 
     viewModel.dispose();
