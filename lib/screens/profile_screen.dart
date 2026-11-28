@@ -1,4 +1,4 @@
-import 'dart:ui' as ui;
+import 'package:image/image.dart' as img;
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -115,26 +115,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     String savedPath;
     try {
-      final codec = await ui.instantiateImageCodec(await photo.readAsBytes());
-      try {
-        final frame = await codec.getNextFrame();
-        try {
-          final jpegData = await frame.image.toByteData(
-            format: ui.ImageByteFormat.jpeg,
-          );
-          if (jpegData == null) {
-            throw const FormatException('No se pudo convertir la imagen a JPEG.');
-          }
-          final saved = await PhotoStorageService().savePhotoBytes(
-            jpegData.buffer.asUint8List(),
-          );
-          savedPath = saved.path;
-        } finally {
-          frame.image.dispose();
-        }
-      } finally {
-        codec.dispose();
+      // Flutter's dart:ui no permite codificar directamente a JPEG.
+      // Usamos package:image para decodificar la foto y volverla a codificar.
+      final originalBytes = await photo.readAsBytes();
+      final decodedImage = img.decodeImage(originalBytes);
+      if (decodedImage == null) {
+        throw const FormatException('El archivo seleccionado no es una imagen válida.');
       }
+      final orientedImage = img.bakeOrientation(decodedImage);
+      final jpegBytes = img.encodeJpg(orientedImage, quality: 85);
+      final saved = await PhotoStorageService().savePhotoBytes(jpegBytes);
+      savedPath = saved.path;
     } catch (_) {
       throw const ProfileException(
         'La imagen no se pudo procesar. Prueba con otra foto.',
