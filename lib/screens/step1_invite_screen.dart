@@ -34,9 +34,10 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
         )..loadFriends();
   }
   String initialsOf(String name) {
-    final parts = name.split(' ');
-    if (parts.length == 1) return parts[0][0];
-    return parts[0][0] + parts[1][0];
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 
   void toggle(FriendStatus friend) {
@@ -127,10 +128,11 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
                   )
               else if (_viewModel.availableFriends.isEmpty)
                   const Padding(
-                    padding: EdgeInsets.only(top: 24),
+                    padding: EdgeInsets.only(top: 24, bottom: 12),
                     child: Center(
                       child: Text(
-                        'Ninguno de tus amigos está libre en este momento',
+                        'No tienes amigos disponibles. Puedes continuar y crear una actividad para ti.',
+                        textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12),
                       ),
                     ),
@@ -213,7 +215,7 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _viewModel.selectedAvailableFriends.isEmpty
+                        onPressed: _viewModel.isLoadingFriends
                             ? null
                             : () {
                           Navigator.push(
@@ -235,7 +237,9 @@ class _Step1InviteScreenState extends State<Step1InviteScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(
-                          'Next (${_viewModel.selectedAvailableFriends.length})',
+                          _viewModel.selectedAvailableFriends.isEmpty
+                              ? 'Continuar sin amigos'
+                              : 'Next (${_viewModel.selectedAvailableFriends.length})',
                         ),
                       ),
                     ),

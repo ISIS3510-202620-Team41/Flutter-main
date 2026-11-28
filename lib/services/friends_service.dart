@@ -18,10 +18,13 @@ class FriendsService {
       path: '/friends/gaps?dateTime=$now',
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('No se pudo consultar la disponibilidad de amigos');
+      throw Exception(_errorMessage(response, 'consultar la disponibilidad'));
     }
 
-    final decoded = jsonDecode(response.body) as List<dynamic>;
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) {
+      throw Exception('El servidor devolvió una respuesta inesperada al cargar los amigos.');
+    }
     return decoded.map((item) {
       final json = Map<String, dynamic>.from(item as Map);
       final name = (json['name'] as String?)?.trim() ?? '';
@@ -32,17 +35,45 @@ class FriendsService {
         status: 'Libre',
       );
     }).toList(growable: false);
-    }
+  }
+
   Future<void> sendRequest(String email) async {
     final response = await _authService.authenticatedRequest(
       method: 'POST',
       path: '/friends/requests',
       headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({'addresseeEmail': email}),
+      body: jsonEncode({
+        'addresseeEmail': email.trim().toLowerCase(),
+      }),
     );
+
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('No se pudo enviar la solicitud');
+      String message = 'No se pudo enviar la solicitud';
+
+      try {
+         final data = jsonDecode(response.body);
+              if (data is Map<String, dynamic>) {
+                message = data['message']?.toString() ?? message;
+        }
+      } catch (_) {}
+
+      throw Exception('Error ${response.statusCode}: $message');
     }
+  }
+
+  String _errorMessage(dynamic response, String action) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map) {
+        for (final key in ['message', 'error', 'detail']) {
+          final value = decoded[key];
+          if (value is String && value.trim().isNotEmpty) return value.trim();
+        }
+      }
+    } catch (_) {
+      // El backend puede responder con texto plano o sin cuerpo.
+    }
+    return 'No se pudo $action (HTTP ${response.statusCode}).';
   }
 
   static String _initials(String name) {

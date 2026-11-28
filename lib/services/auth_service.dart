@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 
 import '../analytics/analytics_facade.dart';
 import 'http_cache_service.dart';
+import 'package:http_parser/http_parser.dart';
 
 final authSession = AuthSession();
 
@@ -335,7 +336,7 @@ class AuthService {
     Future<http.Response> send(String token) async {
       final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl$path'))
         ..headers['Authorization'] = 'Bearer $token'
-        ..files.add(await http.MultipartFile.fromPath(field, filePath));
+        ..files.add(await http.MultipartFile.fromPath(field, filePath,filename: 'profile.jpg',contentType: MediaType('image', 'jpeg'),),);
       return http.Response.fromStream(await _client.send(request));
     }
 

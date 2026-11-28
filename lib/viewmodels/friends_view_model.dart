@@ -52,8 +52,8 @@ class FriendsViewModel extends ChangeNotifier {
     try {
       await _friendsService.sendRequest(email.trim());
       return null;
-    } catch (_) {
-      return 'No pudimos enviar la solicitud.';
+    } catch (error) {
+      return error.toString().replaceFirst('Exception: ', '');
     }
   }
 }
@@ -198,9 +198,7 @@ class ActivityCreationViewModel extends ChangeNotifier {
   }
 
   String? get validationError {
-    if (selectedAvailableFriends.isEmpty) {
-      return 'Select at least one friend.';
-    }
+    // Una actividad puede ser individual; invitar amigos es opcional.
     if (selectedCategory == null) return 'Choose a type of activity.';
     if (selectedPlace == null) return 'Choose a place.';
     return null;
