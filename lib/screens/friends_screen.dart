@@ -71,7 +71,10 @@ class _FriendsScreenState extends State<FriendsScreen> {
     final error = await _viewModel.sendRequest(email);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error ?? 'Solicitud enviada')),
+      SnackBar(
+        content: Text(error ?? 'Solicitud enviada'),
+        backgroundColor: error == null ? AppColors.green : AppColors.rosewood,
+      ),
     );
   }
 
