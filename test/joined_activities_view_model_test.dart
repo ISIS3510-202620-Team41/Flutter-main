@@ -195,6 +195,47 @@ void main() {
   );
 
   test(
+    'shows cached activities first but replaces them with SQLite values',
+    () async {
+      final activity = _activity();
+      await activityRepository.upsertAll([activity]);
+      await joinedRepository.reconcileFromBackend(
+        userId: 'user-a',
+        remote: [_remote(activity)],
+      );
+      connectivity.isOnline = false;
+      await viewModel.load();
+
+      final database = await appDatabase.database;
+      await database.update(
+        'joined_activities',
+        {'last_error': 'new SQLite value'},
+        where: 'user_id = ? AND activity_id = ?',
+        whereArgs: ['user-a', activity.id],
+      );
+      final cachedSnapshotShown = Completer<String?>();
+      void captureCachedSnapshot() {
+        if (!viewModel.isLoading &&
+            viewModel.activities.isNotEmpty &&
+            !cachedSnapshotShown.isCompleted) {
+          cachedSnapshotShown.complete(
+            viewModel.activities.single.lastError,
+          );
+        }
+      }
+
+      viewModel.addListener(captureCachedSnapshot);
+      final reload = viewModel.load();
+
+      expect(await cachedSnapshotShown.future, isNull);
+      await reload;
+      viewModel.removeListener(captureCachedSnapshot);
+
+      expect(viewModel.activities.single.lastError, 'new SQLite value');
+    },
+  );
+
+  test(
     'shows an interrupted processing action as pending while offline',
     () async {
       final activity = _activity();

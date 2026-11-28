@@ -88,6 +88,12 @@ class JoinedActivitiesViewModel extends ChangeNotifier {
         throw const AuthException(message: 'No pudimos identificar tu sesión.');
       }
       _userId = userId;
+      final cached = _repository.getCachedForUser(userId);
+      if (cached != null && cached.isNotEmpty) {
+        activities = _forDisplay(cached);
+        isLoading = false;
+        _notifyIfAlive();
+      }
       activities = _forDisplay(await _repository.getForUser(userId));
       isLoading = false;
       _notifyIfAlive();

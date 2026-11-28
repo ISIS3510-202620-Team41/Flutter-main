@@ -127,10 +127,50 @@ void main() {
   );
 
   test(
+    'refreshes cached snapshots from SQLite and clears them on account switch',
+    () async {
+      final activity = _activity('activity-1');
+      await activityRepository.upsertAll([activity]);
+      await joinedRepository.reconcileFromBackend(
+        userId: 'user-a',
+        remote: [_remote(activity, userId: 'user-a')],
+      );
+      await joinedRepository.getForUser('user-a');
+      expect(joinedRepository.getCachedForUser('user-a'), hasLength(1));
+
+      final database = await appDatabase.database;
+      await database.update(
+        'joined_activities',
+        {'last_error': 'new SQLite value'},
+        where: 'user_id = ? AND activity_id = ?',
+        whereArgs: ['user-a', activity.id],
+      );
+
+      expect(
+        joinedRepository
+            .getCachedForUser('user-a')!
+            .single
+            .lastError,
+        isNull,
+      );
+      final authoritative = await joinedRepository.getForUser('user-a');
+      expect(authoritative.single.lastError, 'new SQLite value');
+      expect(
+        joinedRepository.getCachedForUser('user-a')!.single.lastError,
+        'new SQLite value',
+      );
+
+      expect(joinedRepository.getCachedForUser('user-b'), isNull);
+      expect(joinedRepository.getCachedForUser('user-a'), isNull);
+    },
+  );
+
+  test(
     'cancels a queued join when the user leaves before it is sent',
     () async {
       final activity = _activity('activity-1');
       await activityRepository.upsertAll([activity]);
+      await joinedRepository.getForUser('user-a');
       await joinedRepository.enqueueJoin(
         _action(
           id: 'join-1',
@@ -140,6 +180,7 @@ void main() {
         ),
       );
 
+      expect(joinedRepository.getCachedForUser('user-a'), isNull);
       expect(await joinedRepository.getForUser('user-a'), hasLength(1));
       expect(
         (await joinedRepository.getForUser('user-a')).single.enrollmentStatus,
@@ -155,6 +196,7 @@ void main() {
         ),
       );
 
+      expect(joinedRepository.getCachedForUser('user-a'), isNull);
       expect(await joinedRepository.getForUser('user-a'), isEmpty);
       expect(await pendingActionsRepository.getAllByUser('user-a'), isEmpty);
     },
@@ -252,6 +294,7 @@ void main() {
         userId: 'user-a',
         remote: [_remote(activity, userId: 'user-a')],
       );
+      await joinedRepository.getForUser('user-a');
       final leave = _action(
         id: 'leave-1',
         userId: 'user-a',
@@ -259,13 +302,18 @@ void main() {
         type: PendingActionType.leaveActivity,
       );
       await joinedRepository.enqueueLeave(leave);
+      expect(joinedRepository.getCachedForUser('user-a'), isNull);
+      await joinedRepository.getForUser('user-a');
       await joinedRepository.updateActionStatus(
         action: leave,
         status: PendingActionStatus.processing,
       );
+      expect(joinedRepository.getCachedForUser('user-a'), isNull);
+      await joinedRepository.getForUser('user-a');
 
       await joinedRepository.completeAction(leave);
 
+      expect(joinedRepository.getCachedForUser('user-a'), isNull);
       expect(await joinedRepository.getForUser('user-a'), isEmpty);
       expect(await pendingActionsRepository.getAllByUser('user-a'), isEmpty);
     },

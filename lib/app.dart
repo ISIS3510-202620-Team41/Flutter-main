@@ -18,6 +18,7 @@ import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/step1_invite_screen.dart';
 import 'screens/activity_reminders_screen.dart';
+import 'database/local_database_facade.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'services/connectivity_service.dart';
@@ -117,6 +118,7 @@ class _LlamallaAppState extends State<LlamallaApp> with WidgetsBindingObserver {
 
     // Si el usuario cierra sesión, regresamos al login.
     if (authSession.isAuthenticated == false) {
+      LocalDatabaseFacade.instance.joinedActivities?.clearMemoryCache();
       _navigatorKey.currentState?.pushNamedAndRemoveUntil(
         AppRoutes.login,
         (_) => false,

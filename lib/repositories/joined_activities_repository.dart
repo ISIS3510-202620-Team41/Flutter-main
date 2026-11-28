@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 
+import '../cache/joined_activity_lru_cache.dart';
 import '../models/activity_record.dart';
 import '../models/joined_activity_record.dart';
 import '../models/pending_action.dart';
@@ -14,10 +15,12 @@ class JoinedActivitiesRepository {
     this._activityRepository,
     this._pendingActionsRepository, {
     ActivityService? activityService,
+    JoinedActivityLruCache? activityCache,
     DateTime Function()? now,
   }) : _activityService =
            activityService ??
            ActivityService(localRepository: _activityRepository),
+       _activityCache = activityCache ?? JoinedActivityLruCache(),
        _now = now ?? DateTime.now;
 
   static const _joinType = 'JOIN_ACTIVITY';
@@ -27,7 +30,9 @@ class JoinedActivitiesRepository {
   final ActivityLocalRepository _activityRepository;
   final PendingActionsRepository _pendingActionsRepository;
   final ActivityService _activityService;
+  final JoinedActivityLruCache _activityCache;
   final DateTime Function() _now;
+  String? _activeUserId;
 
   static const _joinedSelect = '''
     SELECT
@@ -48,16 +53,30 @@ class JoinedActivitiesRepository {
   ''';
 
   Future<List<JoinedActivityRecord>> getForUser(String userId) async {
+    _activateUser(userId);
     final rows = await _database.rawQuery(
       '$_joinedSelect ORDER BY activities.start_time ASC',
       [userId],
     );
-    return rows
+    final records = rows
         .map(JoinedActivityRecord.fromDatabaseMap)
         .toList(growable: false);
+    _activityCache.replaceForUser(userId, records);
+    return records;
+  }
+
+  List<JoinedActivityRecord>? getCachedForUser(String userId) {
+    _activateUser(userId);
+    return _activityCache.getForUser(userId);
+  }
+
+  void clearMemoryCache() {
+    _activityCache.clear();
+    _activeUserId = null;
   }
 
   Future<void> refreshFromBackend(String userId) async {
+    _activateUser(userId);
     final remote = await _activityService.getJoinedActivities(userId: userId);
 
     final records = <ActivityRecord>[];
@@ -73,6 +92,7 @@ class JoinedActivitiesRepository {
       records,
       policy: ActivityWritePolicy.essential,
     );
+    _activityCache.clearUser(userId);
     await reconcileFromBackend(userId: userId, remote: remote);
   }
 
@@ -85,6 +105,7 @@ class JoinedActivitiesRepository {
         'Joined activities can only be reconciled for their owner.',
       );
     }
+    _activateUser(userId);
 
     final now = _now().toUtc();
     final remoteById = {for (final item in remote) item.activity.id: item};
@@ -179,7 +200,7 @@ class JoinedActivitiesRepository {
           );
         }
       }
-    });
+    }, userId: userId);
   }
 
   Future<void> recordConfirmedJoin({
@@ -246,7 +267,7 @@ class JoinedActivitiesRepository {
         updatedAt: now.toIso8601String(),
         syncedAt: now.toIso8601String(),
       );
-    });
+    }, userId: userId, activityId: activityId);
   }
 
   Future<void> enqueueJoin(PendingAction action) async {
@@ -310,7 +331,7 @@ class JoinedActivitiesRepository {
           now: now,
         );
       }
-    });
+    }, userId: action.userId, activityId: action.activityId);
   }
 
   Future<void> enqueueLeave(PendingAction action) async {
@@ -408,7 +429,7 @@ class JoinedActivitiesRepository {
           now: now,
         );
       }
-    });
+    }, userId: action.userId, activityId: action.activityId);
   }
 
   Future<void> updateActionStatus({
@@ -443,7 +464,7 @@ class JoinedActivitiesRepository {
           now: now,
         );
       }
-    });
+    }, userId: action.userId, activityId: action.activityId);
   }
 
   Future<void> completeAction(PendingAction action) async {
@@ -500,7 +521,7 @@ class JoinedActivitiesRepository {
           whereArgs: [action.userId, action.activityId],
         );
       }
-    });
+    }, userId: action.userId, activityId: action.activityId);
   }
 
   Future<bool> retryFailedAction({
@@ -545,7 +566,7 @@ class JoinedActivitiesRepository {
         );
       }
       return true;
-    });
+    }, userId: userId, activityId: activityId);
   }
 
   Future<void> recordConfirmedLeave({
@@ -595,7 +616,7 @@ class JoinedActivitiesRepository {
           now: _now().toUtc(),
         );
       }
-    });
+    }, userId: userId, activityId: activityId);
   }
 
   Future<List<PendingAction>> _readActions(
@@ -713,9 +734,28 @@ class JoinedActivitiesRepository {
 
   Future<T> _writeTransaction<T>(
     String operation,
-    Future<T> Function(Transaction transaction) action,
-  ) {
-    return runStorageWrite(operation, () => _database.transaction(action));
+    Future<T> Function(Transaction transaction) action, {
+    required String userId,
+    String? activityId,
+  }) async {
+    _activateUser(userId);
+    final result = await runStorageWrite(
+      operation,
+      () => _database.transaction(action),
+    );
+    if (activityId == null) {
+      _activityCache.clearUser(userId);
+    } else {
+      _activityCache.invalidate(userId: userId, activityId: activityId);
+    }
+    return result;
+  }
+
+  void _activateUser(String userId) {
+    if (_activeUserId != null && _activeUserId != userId) {
+      _activityCache.clear();
+    }
+    _activeUserId = userId;
   }
 
   JoinedSyncStatus _syncStatusFor(PendingActionStatus status) {
